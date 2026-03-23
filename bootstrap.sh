@@ -407,25 +407,10 @@ install_cert_manager() {
     # Apply the cert-manager manifest
     kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.yaml
     
-    echo "Waiting for cert-manager pods to be ready..."
-    # Wait for all cert-manager deployments
-    kubectl wait --namespace cert-manager \
-      --for=condition=ready pod \
-      --selector=app.kubernetes.io/instance=cert-manager \
-      --timeout=120s
-
-    # Wait specifically for the main components
-    kubectl wait --namespace cert-manager \
-      --for=condition=Available=True deployment \
-      --selector=app.kubernetes.io/instance=cert-manager \
-      --timeout=120s
-
-    # Wait for the webhook to be ready
-    echo "Waiting for cert-manager-webhook..."
-    kubectl wait --namespace cert-manager \
-      --for=condition=Available=True deployment \
-      --selector=app.kubernetes.io/name=webhook \
-      --timeout=120s
+    echo "Waiting for cert-manager deployments to be ready..."
+    wait_for_deployment cert-manager cert-manager
+    wait_for_deployment cert-manager-cainjector cert-manager
+    wait_for_deployment cert-manager-webhook cert-manager
 
     # Optional: Verify the webhook is properly configured
     echo "Verifying webhook configuration..."
