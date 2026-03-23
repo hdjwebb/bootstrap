@@ -1,4 +1,4 @@
-# microK8s bootstrap copyroght henry webb 2024
+# K8s bootstrap copyright henry webb 2024
 # ####
 # ####
 
