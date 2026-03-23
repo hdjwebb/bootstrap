@@ -93,6 +93,31 @@ wait_for_secret() {
     done
 }
 
+wait_for_externalsecret_ready() {
+    local namespace="$1"
+    local name="$2"
+    local timeout="${3:-120}"
+    local elapsed=0
+    local ready_status=""
+
+    echo "Waiting for ExternalSecret ${name} in namespace ${namespace}..."
+
+    while true; do
+        ready_status="$(kubectl get externalsecret "${name}" -n "${namespace}" -o jsonpath="{.status.conditions[?(@.type==\"Ready\")].status}" 2>/dev/null || true)"
+
+        if [ "${ready_status}" = "True" ]; then
+            return 0
+        fi
+
+        if [ "${elapsed}" -ge "${timeout}" ]; then
+            die "ExternalSecret ${name} in namespace ${namespace} did not become ready within ${timeout}s."
+        fi
+
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+}
+
 
 # Creates a returned line to be used to separate console logs!
 # ####
@@ -218,6 +243,23 @@ argocd_hostname() {
     fi
 
     printf '%s.%s\n' "${ARGOCD_HOSTNAME_PREFIX}" "${domain_value}"
+}
+
+restart_argocd_repo_server_if_present() {
+    if kubectl get deployment argocd-repo-server -n argocd >/dev/null 2>&1; then
+        echo "Restarting Argo CD repo-server to pick up refreshed repository credentials..."
+        kubectl delete pod -l app.kubernetes.io/name=argocd-repo-server -n argocd
+        kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=argocd-repo-server -n argocd --timeout=180s
+    fi
+}
+
+refresh_argocd_application_if_present() {
+    local application_name="$1"
+
+    if kubectl get application "${application_name}" -n argocd >/dev/null 2>&1; then
+        echo "Hard refreshing Argo CD application ${application_name}..."
+        kubectl annotate application "${application_name}" -n argocd argocd.argoproj.io/refresh=hard --overwrite
+    fi
 }
 
 write_argocd_kustomization() {
@@ -918,6 +960,13 @@ EOF
 
     # Install ArgoCD using kustomize
     kubectl apply -k "$TEMP_DIR"
+
+    wait_for_externalsecret_ready argocd components-repo-secret 120
+    wait_for_externalsecret_ready argocd cluster-repo-secret 120
+    wait_for_externalsecret_ready argocd registry-secret 120
+    wait_for_externalsecret_ready argocd public-pages-helm-repo 120
+    restart_argocd_repo_server_if_present
+    refresh_argocd_application_if_present app-of-apps
 
         # Clean up the temporary directory
     rm -rf "$TEMP_DIR"

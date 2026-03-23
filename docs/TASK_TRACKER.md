@@ -26,3 +26,9 @@
 - [x] Verify the Akeyless `ClusterSecretStore` becomes `Ready=True` on `minikube`.
 - [x] Remove the dead secret lookup in `add-app-of-apps` that produced a misleading operator error.
 - [x] Confirm the remaining local failure is missing GitLab secret items in Akeyless, not a bootstrap shell bug.
+
+## 2026-03-23 Repository Credential Refresh
+
+- [x] Add a regression test that proves `add-gitlab-repos` waits for repo ExternalSecrets and refreshes Argo CD.
+- [x] Teach `add-gitlab-repos` to wait for repository credential sync before finishing.
+- [x] Restart `argocd-repo-server` and hard-refresh `app-of-apps` after repository credentials change.

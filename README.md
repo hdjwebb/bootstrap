@@ -114,3 +114,5 @@ The script also expects `kubectl` to be configured for the target cluster.
 - repository/bootstrap operations are action-driven rather than enabled by editing `main()`
 - Argo CD exposure, MetalLB address pools, Akeyless secret paths, and the
   app-of-apps source are all profile-driven instead of hard-coded inline
+- `add-gitlab-repos` now waits for the repository `ExternalSecret` objects to
+  sync, restarts `argocd-repo-server`, and hard-refreshes `app-of-apps`
