@@ -31,4 +31,9 @@ assert_contains 'case "\$action" in' "bootstrap.sh should validate actions throu
 assert_contains 'full-install' "bootstrap.sh should expose an explicit full-install action"
 assert_not_contains '^  add_argocd_app_of_apps$' "bootstrap.sh should not hard-code a single action inside main()"
 
+if ! PATH="/usr/bin:/bin" bash "$SCRIPT" help >/dev/null; then
+  echo "FAIL: bootstrap.sh help should work without requiring cluster access or kubectl"
+  exit 1
+fi
+
 echo "PASS: bootstrap action interface checks passed"

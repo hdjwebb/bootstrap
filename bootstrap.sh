@@ -5,6 +5,30 @@
 set -euo pipefail
 
 declare -a TEMP_DIRS=()
+declare -a ACTIONS=()
+
+BOOTSTRAP_PROFILE="${BOOTSTRAP_PROFILE:-microk8s-prod}"
+ARGOCD_ACCESS_MODE=""
+INSTALL_ENVOY=""
+INSTALL_METALLB=""
+INSTALL_ARGOCD_DOMAIN_SECRET=""
+METALLB_ADDRESS_POOL=""
+DOMAIN_SECRET_REMOTE_KEY=""
+GITLAB_COMPONENTS_REPO_AUTH_KEY=""
+GITLAB_CLUSTER_REPO_AUTH_KEY=""
+GITLAB_REGISTRY_AUTH_KEY=""
+GITLAB_PAGES_HELM_REPO_KEY=""
+HELM_REGISTRY_URL=""
+APP_OF_APPS_REPO_URL=""
+APP_OF_APPS_TARGET_REVISION=""
+APP_OF_APPS_PATH=""
+ARGOCD_HOSTNAME_PREFIX="${BOOTSTRAP_ARGOCD_HOSTNAME_PREFIX:-argocd}"
+ARGOCD_PORT_FORWARD_PORT="${BOOTSTRAP_ARGOCD_PORT_FORWARD_PORT:-8080}"
+
+die() {
+    echo "❌   Error: $*" >&2
+    exit 1
+}
 
 cleanup_temp_dirs() {
     local temp_dir
@@ -78,6 +102,194 @@ emptyline(){
     printf '\n'
 }
 
+configure_profile() {
+    local profile_name="${1:-${BOOTSTRAP_PROFILE}}"
+
+    BOOTSTRAP_PROFILE="${profile_name}"
+    APP_OF_APPS_REPO_URL="${BOOTSTRAP_APP_OF_APPS_REPO_URL:-https://gitlab.com/ifpossible-sre/clusters/microk8s.git}"
+    APP_OF_APPS_TARGET_REVISION="${BOOTSTRAP_APP_OF_APPS_TARGET_REVISION:-main}"
+    APP_OF_APPS_PATH="${BOOTSTRAP_APP_OF_APPS_PATH:-applications/dev}"
+    GITLAB_COMPONENTS_REPO_AUTH_KEY="${BOOTSTRAP_GITLAB_COMPONENTS_REPO_AUTH_KEY:-/microk8s/gitlab-kubecomp-repo-auth}"
+    GITLAB_CLUSTER_REPO_AUTH_KEY="${BOOTSTRAP_GITLAB_CLUSTER_REPO_AUTH_KEY:-/microk8s/gitlab-cluster-repo-auth}"
+    GITLAB_REGISTRY_AUTH_KEY="${BOOTSTRAP_GITLAB_REGISTRY_AUTH_KEY:-/microk8s/gitlab-registry-auth}"
+    GITLAB_PAGES_HELM_REPO_KEY="${BOOTSTRAP_GITLAB_PAGES_HELM_REPO_KEY:-/microk8s/gitlab-pages-helm-repo}"
+    HELM_REGISTRY_URL="${BOOTSTRAP_HELM_REGISTRY_URL:-registry.gitlab.com/ifpossible-sre/charts}"
+    ARGOCD_HOSTNAME_PREFIX="${BOOTSTRAP_ARGOCD_HOSTNAME_PREFIX:-argocd}"
+    ARGOCD_PORT_FORWARD_PORT="${BOOTSTRAP_ARGOCD_PORT_FORWARD_PORT:-8080}"
+
+    case "${profile_name}" in
+        microk8s-prod)
+            ARGOCD_ACCESS_MODE="gateway"
+            INSTALL_ENVOY="true"
+            INSTALL_METALLB="true"
+            INSTALL_ARGOCD_DOMAIN_SECRET="true"
+            DOMAIN_SECRET_REMOTE_KEY="${BOOTSTRAP_DOMAIN_SECRET_KEY:-/microk8s/domain}"
+            METALLB_ADDRESS_POOL="${BOOTSTRAP_METALLB_ADDRESS_POOL:-192.168.0.220-192.168.0.229}"
+            ;;
+        microk8s-lab)
+            ARGOCD_ACCESS_MODE="gateway"
+            INSTALL_ENVOY="true"
+            INSTALL_METALLB="true"
+            INSTALL_ARGOCD_DOMAIN_SECRET="true"
+            DOMAIN_SECRET_REMOTE_KEY="${BOOTSTRAP_DOMAIN_SECRET_KEY:-/microk8s-lab/domain}"
+            METALLB_ADDRESS_POOL="${BOOTSTRAP_METALLB_ADDRESS_POOL:-192.168.0.230-192.168.0.239}"
+            ;;
+        local-test)
+            ARGOCD_ACCESS_MODE="port-forward"
+            INSTALL_ENVOY="false"
+            INSTALL_METALLB="false"
+            INSTALL_ARGOCD_DOMAIN_SECRET="false"
+            DOMAIN_SECRET_REMOTE_KEY=""
+            METALLB_ADDRESS_POOL=""
+            ;;
+        *)
+            die "unknown profile '${profile_name}'. Expected one of: microk8s-prod, microk8s-lab, local-test."
+            ;;
+    esac
+}
+
+require_profile_settings() {
+    if [ -z "${APP_OF_APPS_REPO_URL}" ]; then
+        die "APP_OF_APPS_REPO_URL is empty after configuring profile ${BOOTSTRAP_PROFILE}."
+    fi
+
+    if [ -z "${APP_OF_APPS_TARGET_REVISION}" ]; then
+        die "APP_OF_APPS_TARGET_REVISION is empty after configuring profile ${BOOTSTRAP_PROFILE}."
+    fi
+
+    if [ -z "${APP_OF_APPS_PATH}" ]; then
+        die "APP_OF_APPS_PATH is empty after configuring profile ${BOOTSTRAP_PROFILE}."
+    fi
+
+    if [ "${INSTALL_METALLB}" = "true" ] && [ -z "${METALLB_ADDRESS_POOL}" ]; then
+        die "METALLB_ADDRESS_POOL must be set for profile ${BOOTSTRAP_PROFILE}."
+    fi
+
+    if [ "${INSTALL_ARGOCD_DOMAIN_SECRET}" = "true" ] && [ -z "${DOMAIN_SECRET_REMOTE_KEY}" ]; then
+        die "DOMAIN_SECRET_REMOTE_KEY must be set for profile ${BOOTSTRAP_PROFILE}."
+    fi
+}
+
+parse_cli_args() {
+    ACTIONS=()
+
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --profile)
+                shift
+                [ "$#" -gt 0 ] || die "--profile requires a value."
+                BOOTSTRAP_PROFILE="$1"
+                ;;
+            --profile=*)
+                BOOTSTRAP_PROFILE="${1#*=}"
+                ;;
+            help|-h|--help)
+                ACTIONS+=("help")
+                ;;
+            *)
+                ACTIONS+=("$1")
+                ;;
+        esac
+
+        shift
+    done
+}
+
+argocd_gateway_enabled() {
+    [ "${ARGOCD_ACCESS_MODE}" = "gateway" ]
+}
+
+argocd_domain() {
+    kubectl get secret domain -n argocd -o jsonpath="{.data.domain}" | base64 --decode
+}
+
+argocd_hostname() {
+    local domain_value
+
+    if ! argocd_gateway_enabled; then
+        printf 'http://127.0.0.1:%s\n' "${ARGOCD_PORT_FORWARD_PORT}"
+        return 0
+    fi
+
+    if kubectl get secret domain -n argocd >/dev/null 2>&1; then
+        domain_value="$(argocd_domain)"
+    else
+        domain_value="${BOOTSTRAP_FALLBACK_DOMAIN:-bootstrap.local}"
+    fi
+
+    printf '%s.%s\n' "${ARGOCD_HOSTNAME_PREFIX}" "${domain_value}"
+}
+
+write_argocd_kustomization() {
+    local temp_dir="$1"
+
+    cat <<EOF > "${temp_dir}/kustomization.yaml"
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: argocd
+
+resources:
+- https://raw.githubusercontent.com/argoproj/argo-cd/v2.12.3/manifests/install.yaml
+EOF
+
+    if argocd_gateway_enabled; then
+        cat <<EOF >> "${temp_dir}/kustomization.yaml"
+- httproute.yaml
+EOF
+    fi
+
+    cat <<'EOF' >> "${temp_dir}/kustomization.yaml"
+
+patches:
+- patch: |-
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: argocd-cmd-params-cm
+    data:
+      server.insecure: "true"
+  target:
+    kind: ConfigMap
+    name: argocd-cmd-params-cm
+- patch: |-
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: argocd-cm
+      namespace: argocd
+      labels:
+        app.kubernetes.io/name: argocd-cm
+        app.kubernetes.io/part-of: argocd
+    data:
+      kustomize.buildOptions: |
+        --enable-helm
+  target:
+    kind: ConfigMap
+    name: argocd-cm
+EOF
+
+    if argocd_gateway_enabled; then
+        cat <<EOF > "${temp_dir}/httproute.yaml"
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: argocd-route
+  namespace: argocd
+spec:
+  parentRefs:
+  - name: tunnel-gateway
+    namespace: envoy-gateway-system
+  hostnames:
+  - "$(argocd_hostname)"
+  rules:
+  - backendRefs:
+    - name: argocd-server
+      port: 80
+      kind: Service
+EOF
+    fi
+}
+
 # Function to validate required variables
 # ####
 # ####
@@ -85,12 +297,12 @@ emptyline(){
 validate_variables() {
     local missing_variables=0
     
-    if [ -z "$AKEYLESS_ACCESS_ID" ]; then
+    if [ -z "${AKEYLESS_ACCESS_ID:-}" ]; then
         echo "❌   Error: AKEYLESS_ACCESS_ID is not set!"
         missing_variables=1
     fi
     
-    if [ -z "$AKEYLESS_ACCESS_SECRET_KEY" ]; then
+    if [ -z "${AKEYLESS_ACCESS_SECRET_KEY:-}" ]; then
         echo "❌   Error: AKEYLESS_ACCESS_SECRET_KEY is not set!"
         missing_variables=1
     fi
@@ -365,6 +577,12 @@ EOF
 }
 
 install_envoy() {
+    if [ "${INSTALL_ENVOY}" != "true" ]; then
+        echo "Skipping Envoy Gateway for profile ${BOOTSTRAP_PROFILE}."
+        emptyline
+        return 0
+    fi
+
     echo "Installing Envoy Gateway..."
 # Install Envoy Gateway
 kubectl apply -f https://github.com/envoyproxy/gateway/releases/download/v1.1.0/install.yaml --server-side
@@ -403,6 +621,12 @@ EOF
 }
 
 install_metallb() {
+    if [ "${INSTALL_METALLB}" != "true" ]; then
+        echo "Skipping MetalLB for profile ${BOOTSTRAP_PROFILE}."
+        emptyline
+        return 0
+    fi
+
     echo "Installing MetalLB..."
 
     # Create namespace
@@ -434,7 +658,7 @@ metadata:
   namespace: metallb-system
 spec:
   addresses:
-  - 192.168.0.220-192.168.0.229
+  - ${METALLB_ADDRESS_POOL}
   autoAssign: true
 ---
 apiVersion: metallb.io/v1beta1
@@ -456,6 +680,11 @@ EOF
 }
 
 install_argocd_secret() {
+    if [ "${INSTALL_ARGOCD_DOMAIN_SECRET}" != "true" ]; then
+        echo "Skipping Argo CD domain ExternalSecret for profile ${BOOTSTRAP_PROFILE}."
+        emptyline
+        return 0
+    fi
 
     # Create namespace
     create_namespace_if_not_exists argocd
@@ -481,7 +710,7 @@ spec:
   data:
     - secretKey: domain
       remoteRef:
-        key: /microk8s/domain
+        key: ${DOMAIN_SECRET_REMOTE_KEY}
 EOF
 
     # Apply custom resources
@@ -498,81 +727,14 @@ EOF
 install_argocd() {
     echo "Installing ArgoCD..."
 
-    wait_for_secret argocd domain 120
+    if argocd_gateway_enabled; then
+        wait_for_secret argocd domain 120
+    fi
 
     # Create a temporary directory for Kustomize files
     TEMP_DIR="$(create_temp_dir)"
 
-    # Create kustomization.yaml for ArgoCD
-    cat <<EOF > "$TEMP_DIR/kustomization.yaml"
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-namespace: argocd
-
-resources:
-- https://raw.githubusercontent.com/argoproj/argo-cd/v2.12.3/manifests/install.yaml
-- httproute.yaml
-
-
-patches:
-- patch: |-
-    apiVersion: v1
-    kind: ConfigMap
-    metadata:
-      name: argocd-cmd-params-cm
-    data:
-      server.insecure: "true"
-  target:
-    kind: ConfigMap
-    name: argocd-cmd-params-cm
-- patch: |-
-    apiVersion: v1
-    kind: ConfigMap
-    metadata:
-      name: argocd-cm
-      namespace: argocd
-      labels:
-        app.kubernetes.io/name: argocd-cm
-        app.kubernetes.io/part-of: argocd
-    data:
-      kustomize.buildOptions: |
-        --enable-helm
-  target:
-    kind: ConfigMap
-    name: argocd-cm
-
-- target:
-    group: gateway.networking.k8s.io
-    version: v1
-    kind: HTTPRoute
-    name: argocd-route
-    namespace: argocd
-  patch: |
-    - op: replace
-      path: /spec/rules/0/matches/0/headers/0/value
-      value: "argocd.$(kubectl get secret domain -n argocd -o jsonpath="{.data.domain}" | base64 --decode)"
-EOF
-    # Create httproute.yaml with valueFrom for the hostname
-    cat <<EOF > "$TEMP_DIR/httproute.yaml"
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: argocd-route
-  namespace: argocd
-spec:
-  parentRefs:
-  - name: tunnel-gateway
-    namespace: envoy-gateway-system
-  rules:
-  - matches:
-    - headers:
-      - name: "Host"
-        value: "meh"
-    backendRefs:
-    - name: argocd-server
-      port: 80
-      kind: Service
-EOF
+    write_argocd_kustomization "$TEMP_DIR"
 
     # Create the namespace first
     # kubectl apply -f "$TEMP_DIR/namespace.yaml"
@@ -640,15 +802,15 @@ spec:
   data:
     - secretKey: url
       remoteRef:
-        key: /microk8s/gitlab-kubecomp-repo-auth
+        key: ${GITLAB_COMPONENTS_REPO_AUTH_KEY}
         property: url
     - secretKey: username
       remoteRef:
-        key: /microk8s/gitlab-kubecomp-repo-auth
+        key: ${GITLAB_COMPONENTS_REPO_AUTH_KEY}
         property: username
     - secretKey: password
       remoteRef:
-        key: /microk8s/gitlab-kubecomp-repo-auth
+        key: ${GITLAB_COMPONENTS_REPO_AUTH_KEY}
         property: token
 ---
 apiVersion: external-secrets.io/v1beta1
@@ -679,15 +841,15 @@ spec:
   data:
     - secretKey: url
       remoteRef:
-        key: /microk8s/gitlab-cluster-repo-auth
+        key: ${GITLAB_CLUSTER_REPO_AUTH_KEY}
         property: url
     - secretKey: username
       remoteRef:
-        key: /microk8s/gitlab-cluster-repo-auth
+        key: ${GITLAB_CLUSTER_REPO_AUTH_KEY}
         property: username
     - secretKey: password
       remoteRef:
-        key: /microk8s/gitlab-cluster-repo-auth
+        key: ${GITLAB_CLUSTER_REPO_AUTH_KEY}
         property: token
 ---
 apiVersion: external-secrets.io/v1beta1
@@ -709,19 +871,18 @@ spec:
         labels:
           argocd.argoproj.io/secret-type: repository
       data:
-        # Create a custom configuration using fetched values
-        url: registry.gitlab.com/ifpossible-sre/charts       # Registry URL
+        url: ${HELM_REGISTRY_URL}                                   # Registry URL
         username: "{{ .username | toString }}"                        # Username
         password: "{{ .password | toString }}"                        # Password
         type: helm                                                    # Repository type for ArgoCD
   data:
     - secretKey: username
       remoteRef:
-        key: /microk8s/gitlab-registry-auth
+        key: ${GITLAB_REGISTRY_AUTH_KEY}
         property: username
     - secretKey: password
       remoteRef:
-        key: /microk8s/gitlab-registry-auth
+        key: ${GITLAB_REGISTRY_AUTH_KEY}
         property: password
 ---
 apiVersion: external-secrets.io/v1beta1
@@ -748,7 +909,7 @@ spec:
   data:
     - secretKey: url
       remoteRef:
-        key: /microk8s/gitlab-pages-helm-repo
+        key: ${GITLAB_PAGES_HELM_REPO_KEY}
         property: url
 
 EOF
@@ -812,9 +973,9 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://gitlab.com/ifpossible-sre/clusters/microk8s.git
-    targetRevision: main
-    path: applications/dev
+    repoURL: ${APP_OF_APPS_REPO_URL}
+    targetRevision: ${APP_OF_APPS_TARGET_REVISION}
+    path: ${APP_OF_APPS_PATH}
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd
@@ -888,61 +1049,7 @@ uninstall_argocd() {
     # Create a temporary directory for Kustomize files
     TEMP_DIR="$(create_temp_dir)"
 
-    # Create kustomization.yaml for ArgoCD
-    cat <<EOF > "$TEMP_DIR/kustomization.yaml"
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-namespace: argocd
-
-resources:
-- https://raw.githubusercontent.com/argoproj/argo-cd/v2.12.3/manifests/install.yaml
-- httproute.yaml
-
-
-patches:
-- patch: |-
-    apiVersion: v1
-    kind: ConfigMap
-    metadata:
-      name: argocd-cmd-params-cm
-    data:
-      server.insecure: "true"
-  target:
-    kind: ConfigMap
-    name: argocd-cmd-params-cm
-
-- target:
-    group: gateway.networking.k8s.io
-    version: v1
-    kind: HTTPRoute
-    name: argocd-route
-    namespace: argocd
-  patch: |
-    - op: replace
-      path: /spec/rules/0/matches/0/headers/0/value
-      value: "argocd.$(kubectl get secret domain -n argocd -o jsonpath="{.data.domain}" | base64 --decode)"
-EOF
-    # Create httproute.yaml with valueFrom for the hostname
-    cat <<EOF > "$TEMP_DIR/httproute.yaml"
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: argocd-route
-  namespace: argocd
-spec:
-  parentRefs:
-  - name: tunnel-gateway
-    namespace: envoy-gateway-system
-  rules:
-  - matches:
-    - headers:
-      - name: "Host"
-        value: "meh"
-    backendRefs:
-    - name: argocd-server
-      port: 80
-      kind: Service
-EOF
+    write_argocd_kustomization "$TEMP_DIR"
 
     # Create the namespace first
     # kubectl apply -f "$TEMP_DIR/namespace.yaml"
@@ -964,8 +1071,14 @@ EOF
 get_argocd_password() {
 
   echo "Bootstrap process completed!"
-  echo "ArgoCD should now be accessible via the configured hostname "
-  echo "argocd.$(kubectl get secret domain -n argocd -o jsonpath="{.data.domain}" | base64 -d)"
+  if argocd_gateway_enabled; then
+    echo "ArgoCD should now be accessible via the configured hostname "
+    echo "$(argocd_hostname)"
+  else
+    echo "ArgoCD is configured for local access."
+    echo "Run: kubectl -n argocd port-forward svc/argocd-server ${ARGOCD_PORT_FORWARD_PORT}:80"
+    echo "Then open: $(argocd_hostname)"
+  fi
   emptyline
   echo "Retrieved the ArgoCD admin password: "
   kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
@@ -976,7 +1089,12 @@ get_argocd_password() {
 usage() {
   cat <<'EOF'
 Usage:
-  ./bootstrap.sh <action> [<action>...]
+  ./bootstrap.sh [--profile <name>] <action> [<action>...]
+
+Profiles:
+  microk8s-prod
+  microk8s-lab
+  local-test
 
 Actions:
   install-cert-manager
@@ -996,6 +1114,21 @@ Actions:
   full-install
   full-uninstall
   help
+
+Environment overrides:
+  BOOTSTRAP_PROFILE
+  BOOTSTRAP_METALLB_ADDRESS_POOL
+  BOOTSTRAP_DOMAIN_SECRET_KEY
+  BOOTSTRAP_APP_OF_APPS_REPO_URL
+  BOOTSTRAP_APP_OF_APPS_TARGET_REVISION
+  BOOTSTRAP_APP_OF_APPS_PATH
+  BOOTSTRAP_GITLAB_COMPONENTS_REPO_AUTH_KEY
+  BOOTSTRAP_GITLAB_CLUSTER_REPO_AUTH_KEY
+  BOOTSTRAP_GITLAB_REGISTRY_AUTH_KEY
+  BOOTSTRAP_GITLAB_PAGES_HELM_REPO_KEY
+  BOOTSTRAP_HELM_REGISTRY_URL
+  BOOTSTRAP_ARGOCD_HOSTNAME_PREFIX
+  BOOTSTRAP_ARGOCD_PORT_FORWARD_PORT
 EOF
 }
 
@@ -1101,24 +1234,39 @@ run_action() {
 main() {
   local action
 
-
-  require_commands
-  require_cluster_access
+  parse_cli_args "$@"
   if [ "$#" -eq 0 ]; then
     usage
     exit 1
   fi
 
-  for action in "$@"; do
+  if [ "${#ACTIONS[@]}" -eq 0 ]; then
+    usage
+    exit 1
+  fi
+
+  if [ "${#ACTIONS[@]}" -eq 1 ] && [ "${ACTIONS[0]}" = "help" ]; then
+    usage
+    exit 0
+  fi
+
+  configure_profile "${BOOTSTRAP_PROFILE}"
+  require_profile_settings
+  require_commands
+  require_cluster_access
+
+  for action in "${ACTIONS[@]}"; do
     if action_requires_akeyless "$action"; then
       validate_variables
       break
     fi
   done
 
-  run_action_sequence "$@"
+  run_action_sequence "${ACTIONS[@]}"
 
 }
 
 # Run the main function
-main
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  main "$@"
+fi
