@@ -112,6 +112,7 @@ The script also expects `kubectl` to be configured for the target cluster.
 - the script validates required commands and cluster access before running
 - `help` no longer requires cluster access
 - Argo CD secret reads now wait on the secret instead of relying on a fixed sleep
+- cert-manager readiness now waits on the named deployments instead of selector-based pod discovery
 - repository/bootstrap operations are action-driven rather than enabled by editing `main()`
 - Argo CD exposure, MetalLB address pools, Akeyless secret paths, and the
   app-of-apps source are all profile-driven instead of hard-coded inline

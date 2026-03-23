@@ -38,3 +38,9 @@
 - [x] Add a regression test that proves the `local-test` profile points `app-of-apps` at `applications/local-test`.
 - [x] Stop `local-test` from reconciling the full `applications/dev` stack on disposable clusters.
 - [x] Document the dedicated local-test app-of-apps path in the operator README.
+
+## 2026-03-23 Fresh Cluster Cert-Manager Readiness
+
+- [x] Reproduce the clean-cluster `full-install` failure on `minikube`.
+- [x] Add a regression test that fails if `install_cert_manager` falls back to selector-based pod waits.
+- [x] Switch cert-manager readiness to deterministic deployment waits so fresh installs do not fail with `no matching resources found`.
