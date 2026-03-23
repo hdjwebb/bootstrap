@@ -945,25 +945,6 @@ EOF
 
     # Create App file for ArgoCD app
     cat <<EOF > "$TEMP_DIR/argocd-app.yaml"
-# apiVersion: argoproj.io/v1alpha1
-# kind: Application
-# metadata:
-#   name: argocd
-#   namespace: argocd
-# spec:
-#   project: default
-#   source:
-#     repoURL: $(kubectl get secret gitlab-repo-components-secret -n argocd -o jsonpath="{.data.url}" | base64 --decode)
-#     targetRevision: main
-#     path: argocd
-#   destination:
-#     server: https://kubernetes.default.svc
-#     namespace: argocd
-#   syncPolicy:
-#     automated:
-#       prune: true
-#       selfHeal: true
----
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
