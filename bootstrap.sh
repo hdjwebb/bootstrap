@@ -376,6 +376,11 @@ wait_for_deployment() {
     kubectl wait --for=condition=available --timeout=300s "deployment/$1" -n "$2"
 }
 
+wait_for_daemonset_rollout() {
+    echo "Waiting for daemonset $1 in namespace $2 to roll out..."
+    kubectl rollout status "daemonset/$1" -n "$2" --timeout=300s
+}
+
 
 waiting() {
     local seconds=$1
@@ -524,23 +529,10 @@ EOF
     kubectl apply -k "$TEMP_DIR"
     rm -rf "$TEMP_DIR"
     
-    echo "Waiting for external-secrets pods to be ready..."
-    kubectl wait --namespace external-secrets \
-      --for=condition=ready pod \
-      --selector=app.kubernetes.io/name=external-secrets \
-      --timeout=90s
-
-    echo "Waiting for external-secrets-cert-controller pods to be ready..."
-    kubectl wait --namespace external-secrets \
-      --for=condition=ready pod \
-      --selector=app.kubernetes.io/name=external-secrets-cert-controller \
-      --timeout=90s
-
-    echo "Waiting for external-secrets-webhook pods to be ready..."
-    kubectl wait --namespace external-secrets \
-      --for=condition=ready pod \
-      --selector=app.kubernetes.io/name=external-secrets-webhook  \
-      --timeout=90s
+    echo "Waiting for external-secrets deployments to be ready..."
+    wait_for_deployment external-secrets external-secrets
+    wait_for_deployment external-secrets-cert-controller external-secrets
+    wait_for_deployment external-secrets-webhook external-secrets
 
     echo "✅ - external-secrets installation complete"
     emptyline
@@ -676,11 +668,9 @@ install_metallb() {
     kubectl wait --for condition=established --timeout=60s crd/ipaddresspools.metallb.io
     kubectl wait --for condition=established --timeout=60s crd/l2advertisements.metallb.io
 
-    echo "Waiting for MetalLB controller to be ready..."
-    kubectl wait --namespace metallb-system \
-                 --for=condition=ready pod \
-                 --selector=app=metallb \
-                 --timeout=90s
+    echo "Waiting for MetalLB workloads to be ready..."
+    wait_for_deployment controller metallb-system
+    wait_for_daemonset_rollout speaker metallb-system
 
     # Create a temporary directory for custom resources
     TEMP_DIR="$(create_temp_dir)"
@@ -970,7 +960,6 @@ EOF
 }
 
 add_argocd_app_of_apps() {
-    sleep 5
     echo "Adding ArgoCD application..."
     echo "Applying tracked app-of-apps manifest ${APP_OF_APPS_MANIFEST_FILE}..."
     kubectl apply -f "${APP_OF_APPS_MANIFEST_FILE}"
@@ -978,50 +967,9 @@ add_argocd_app_of_apps() {
 }
 
 remove_argocd_app() {
-    sleep 5
     echo "Removing ArgoCD application..."
-    # Create a temporary directory for Kustomize files
-    TEMP_DIR="$(create_temp_dir)"
-
-
-
-    # Create kustomization.yaml for ArgoCD
-    cat <<EOF > "$TEMP_DIR/kustomization.yaml"
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-namespace: argocd
-
-resources:
-- argocd-app.yaml
-EOF
-
-    # Create App file for ArgoCD app
-    cat <<EOF > "$TEMP_DIR/argocd-app.yaml"
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: argocd
-  namespace: argocd
-spec:
-  project: default
-  source:
-    repoURL: $(kubectl get secret gitlab-repo-components-secret -n argocd -o jsonpath="{.data.url}" | base64 --decode)
-    targetRevision: main
-    path: argocd
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: argocd
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-EOF
-
-    # Remove ArgoCD using kustomize
-    kubectl delete -k "$TEMP_DIR"
-
-        # Clean up the temporary directory
-    rm -rf "$TEMP_DIR"
+    echo "Deleting tracked app-of-apps manifest ${APP_OF_APPS_MANIFEST_FILE}..."
+    kubectl delete -f "${APP_OF_APPS_MANIFEST_FILE}" --ignore-not-found=true
 
     echo "ArgoCD app removed from argocd"
 

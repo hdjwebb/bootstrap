@@ -50,3 +50,10 @@
 - [x] Add regressions that fail unless bootstrap applies a tracked app-of-apps manifest by profile.
 - [x] Replace inline root `Application` rendering in `bootstrap.sh` with tracked manifest application.
 - [x] Document the cluster-repo root manifest path as the bootstrap source of truth.
+
+## 2026-03-23 Remaining Wait Hardening
+
+- [x] Add regressions for the remaining selector-based external-secrets waits and tracked app-of-apps add/remove actions.
+- [x] Switch external-secrets readiness from pod selectors to named deployment waits.
+- [x] Remove the fixed app-of-apps sleeps and make add/remove operate directly on the tracked manifest path.
+- [x] Switch MetalLB readiness from a pod selector to explicit controller and speaker workload waits.

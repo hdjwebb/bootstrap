@@ -31,5 +31,6 @@ assert_not_contains "$ADD_APP_FUNCTION" 'repoURL: \$\(kubectl get secret gitlab-
 assert_contains "$ADD_APP_FUNCTION" '^add_argocd_app_of_apps\(\)' "bootstrap.sh should define add_argocd_app_of_apps"
 assert_contains "$ADD_APP_FUNCTION" 'kubectl apply -f "\$\{APP_OF_APPS_MANIFEST_FILE\}"' "bootstrap.sh should apply the tracked app-of-apps manifest file"
 assert_not_contains "$ADD_APP_FUNCTION" 'repoURL: \$\{APP_OF_APPS_REPO_URL\}' "bootstrap.sh should not render inline app-of-apps repository YAML"
+assert_not_contains "$ADD_APP_FUNCTION" '^    sleep 5$' "add_argocd_app_of_apps should not rely on a fixed sleep"
 
 echo "PASS: bootstrap app-of-apps template checks passed"

@@ -122,8 +122,11 @@ relative to the bootstrap repo, and you can override it with
 - `help` no longer requires cluster access
 - Argo CD secret reads now wait on the secret instead of relying on a fixed sleep
 - cert-manager readiness now waits on the named deployments instead of selector-based pod discovery
+- external-secrets readiness now waits on named deployments instead of pod selectors
+- MetalLB readiness now waits on the controller deployment and speaker daemonset rather than a broad pod selector
 - repository/bootstrap operations are action-driven rather than enabled by editing `main()`
 - Argo CD exposure, MetalLB address pools, Akeyless secret paths, and the
   tracked app-of-apps manifest are all profile-driven instead of hard-coded inline
+- app-of-apps add/remove now operate directly on the tracked root manifest rather than temp YAML plus fixed sleeps
 - `add-gitlab-repos` now waits for the repository `ExternalSecret` objects to
   sync, restarts `argocd-repo-server`, and hard-refreshes `app-of-apps`
