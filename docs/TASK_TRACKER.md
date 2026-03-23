@@ -19,3 +19,10 @@
 - [x] Run the `local-test` profile against a live `minikube` cluster.
 - [x] Fix `install_argocd` so it creates the `argocd` namespace before applying manifests.
 - [x] Add a regression test that proves namespace creation happens before the Argo CD apply step.
+
+## 2026-03-23 Secret-Backed Local Validation
+
+- [x] Load the Akeyless API key from macOS Keychain and validate the local shell environment.
+- [x] Verify the Akeyless `ClusterSecretStore` becomes `Ready=True` on `minikube`.
+- [x] Remove the dead secret lookup in `add-app-of-apps` that produced a misleading operator error.
+- [x] Confirm the remaining local failure is missing GitLab secret items in Akeyless, not a bootstrap shell bug.
