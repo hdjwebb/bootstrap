@@ -70,6 +70,7 @@ Available actions:
 - skips `envoy`
 - skips `metallb`
 - skips the Argo CD domain `ExternalSecret`
+- points `app-of-apps` at `applications/local-test`
 - exposes Argo CD through `kubectl port-forward` instructions instead of a
   Gateway hostname
 - intended for disposable clusters such as `minikube` where you want to verify
