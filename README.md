@@ -72,6 +72,8 @@ Available actions:
 - skips the Argo CD domain `ExternalSecret`
 - exposes Argo CD through `kubectl port-forward` instructions instead of a
   Gateway hostname
+- intended for disposable clusters such as `minikube` where you want to verify
+  the bootstrap flow without the production ingress/load-balancer stack
 
 ## Profile Overrides
 
