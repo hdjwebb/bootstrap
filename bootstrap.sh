@@ -727,6 +727,8 @@ EOF
 install_argocd() {
     echo "Installing ArgoCD..."
 
+    create_namespace_if_not_exists argocd
+
     if argocd_gateway_enabled; then
         wait_for_secret argocd domain 120
     fi

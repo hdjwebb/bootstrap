@@ -13,3 +13,9 @@
 - [x] Introduce explicit `microk8s-prod`, `microk8s-lab`, and `local-test` profiles.
 - [x] Move MetalLB, Argo CD domain, GitLab secret-path, and app-of-apps settings behind profile defaults.
 - [x] Document the supported profiles and their override points.
+
+## 2026-03-23 Minikube Smoke Test
+
+- [x] Run the `local-test` profile against a live `minikube` cluster.
+- [x] Fix `install_argocd` so it creates the `argocd` namespace before applying manifests.
+- [x] Add a regression test that proves namespace creation happens before the Argo CD apply step.
