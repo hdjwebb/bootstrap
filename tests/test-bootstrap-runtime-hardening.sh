@@ -29,6 +29,8 @@ assert_contains '^trap cleanup_temp_dirs EXIT$' "bootstrap.sh should clean up te
 assert_contains '^require_commands\(\)' "bootstrap.sh should define a command dependency check"
 assert_contains '^require_cluster_access\(\)' "bootstrap.sh should define a cluster access check"
 assert_contains '^wait_for_secret\(\)' "bootstrap.sh should wait for secrets instead of sleeping blindly"
+assert_contains '^wait_for_namespace_deletion\(\)' "bootstrap.sh should define namespace deletion waits for uninstall paths"
 assert_not_contains 'sleep 10  # Wait for 10 seconds to ensure secret is available' "bootstrap.sh should not rely on a fixed sleep before reading the Argo CD domain secret"
+assert_not_contains '^waiting\(\)' "bootstrap.sh should not keep the unused waiting helper"
 
 echo "PASS: bootstrap runtime hardening checks passed"

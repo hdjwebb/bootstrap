@@ -57,3 +57,10 @@
 - [x] Switch external-secrets readiness from pod selectors to named deployment waits.
 - [x] Remove the fixed app-of-apps sleeps and make add/remove operate directly on the tracked manifest path.
 - [x] Switch MetalLB readiness from a pod selector to explicit controller and speaker workload waits.
+
+## 2026-03-23 Uninstall Hardening
+
+- [x] Add regressions for the cert-manager, external-secrets, and Argo CD uninstall paths.
+- [x] Replace broad Argo CD force-delete behavior with tracked manifest deletion plus namespace-deletion waits.
+- [x] Delete Argo CD `Application` resources and clear stuck finalizers before uninstalling the Argo CD control plane.
+- [x] Remove the dead `waiting()` helper and consolidate uninstall polling on `wait_for_namespace_deletion()`.

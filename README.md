@@ -130,3 +130,7 @@ relative to the bootstrap repo, and you can override it with
 - app-of-apps add/remove now operate directly on the tracked root manifest rather than temp YAML plus fixed sleeps
 - `add-gitlab-repos` now waits for the repository `ExternalSecret` objects to
   sync, restarts `argocd-repo-server`, and hard-refreshes `app-of-apps`
+- uninstall paths now wait for namespace deletion instead of relying on broad
+  force-delete fallbacks
+- Argo CD uninstall now deletes `Application` resources and clears stuck Argo
+  finalizers before removing the control plane

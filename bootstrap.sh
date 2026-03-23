@@ -121,6 +121,56 @@ wait_for_externalsecret_ready() {
     done
 }
 
+wait_for_namespace_deletion() {
+    local namespace="$1"
+    local timeout="${2:-180}"
+    local elapsed=0
+
+    echo "Waiting for namespace ${namespace} to be deleted..."
+
+    while kubectl get namespace "${namespace}" >/dev/null 2>&1; do
+        if [ "${elapsed}" -ge "${timeout}" ]; then
+            die "namespace ${namespace} was not deleted within ${timeout}s."
+        fi
+
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+}
+
+delete_argocd_applications() {
+    local timeout="${1:-180}"
+    local elapsed=0
+    local remaining_apps=""
+    local app=""
+
+    if ! kubectl get namespace argocd >/dev/null 2>&1; then
+        return 0
+    fi
+
+    echo "Deleting Argo CD Application resources before uninstalling Argo CD..."
+    kubectl delete applications.argoproj.io --all -n argocd --ignore-not-found=true --wait=false
+
+    while true; do
+        remaining_apps="$(kubectl get applications.argoproj.io -n argocd -o name 2>/dev/null || true)"
+
+        if [ -z "${remaining_apps}" ]; then
+            return 0
+        fi
+
+        for app in ${remaining_apps}; do
+            kubectl patch "${app}" -n argocd --type=merge -p '{"metadata":{"finalizers":[]}}' >/dev/null 2>&1 || true
+        done
+
+        if [ "${elapsed}" -ge "${timeout}" ]; then
+            die "Argo CD Application resources were not deleted within ${timeout}s."
+        fi
+
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+}
+
 
 # Creates a returned line to be used to separate console logs!
 # ####
@@ -382,18 +432,6 @@ wait_for_daemonset_rollout() {
 }
 
 
-waiting() {
-    local seconds=$1
-    echo "Starting countdown for $seconds seconds..."
-    while [ $seconds -gt 0 ]; do
-        printf "\rTime remaining: %02d seconds" $seconds
-        sleep 1
-        ((seconds--))
-    done
-    printf "\rCountdown complete!                   \n"
-}
-
-
 create_namespace_if_not_exists() {
     if ! kubectl get namespace "$1" >/dev/null 2>&1; then
         echo "Creating namespace: $1"
@@ -441,15 +479,9 @@ uninstall_cert_manager() {
     
     # Delete all cert-manager resources
     kubectl delete -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.yaml --ignore-not-found=true
-    
-    # Wait for pods to be terminated
-    while kubectl get pods -n cert-manager 2>/dev/null | grep -q cert-manager; do
-        echo "Waiting for cert-manager pods to terminate..."
-        sleep 2
-    done
-    
-    # Delete the namespace (this will delete any remaining resources in the namespace)
-    kubectl delete namespace cert-manager --ignore-not-found=true
+
+    kubectl delete namespace cert-manager --ignore-not-found=true --wait=false
+    wait_for_namespace_deletion cert-manager 180
     
     echo "✅ - cert-manager uninstallation complete"
     emptyline
@@ -535,6 +567,17 @@ EOF
     wait_for_deployment external-secrets-webhook external-secrets
 
     echo "✅ - external-secrets installation complete"
+    emptyline
+}
+
+uninstall_external_secrets() {
+    echo "Uninstalling external-secrets..."
+
+    kubectl delete -f https://github.com/external-secrets/external-secrets/releases/download/v0.10.4/external-secrets.yaml --ignore-not-found=true
+    kubectl delete namespace external-secrets --ignore-not-found=true --wait=false
+    wait_for_namespace_deletion external-secrets 180
+
+    echo "✅ - external-secrets uninstallation complete"
     emptyline
 }
 
@@ -983,14 +1026,10 @@ uninstall_argocd() {
 
     write_argocd_kustomization "$TEMP_DIR"
 
-    # Create the namespace first
-    # kubectl apply -f "$TEMP_DIR/namespace.yaml"
-
-
-    # Install ArgoCD using kustomize
-    kubectl delete -k "$TEMP_DIR"
-    kubectl delete all --all -n argocd --force --grace-period=0
-    kubectl delete namespace argocd --wait=false
+    delete_argocd_applications 180
+    kubectl delete -k "$TEMP_DIR" --ignore-not-found=true
+    kubectl delete namespace argocd --ignore-not-found=true --wait=false
+    wait_for_namespace_deletion argocd 180
 
     # Clean up the temporary directory
     rm -rf "$TEMP_DIR"
