@@ -44,3 +44,9 @@
 - [x] Reproduce the clean-cluster `full-install` failure on `minikube`.
 - [x] Add a regression test that fails if `install_cert_manager` falls back to selector-based pod waits.
 - [x] Switch cert-manager readiness to deterministic deployment waits so fresh installs do not fail with `no matching resources found`.
+
+## 2026-03-23 App-Of-Apps IaC
+
+- [x] Add regressions that fail unless bootstrap applies a tracked app-of-apps manifest by profile.
+- [x] Replace inline root `Application` rendering in `bootstrap.sh` with tracked manifest application.
+- [x] Document the cluster-repo root manifest path as the bootstrap source of truth.

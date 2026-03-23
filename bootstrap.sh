@@ -7,6 +7,9 @@ set -euo pipefail
 declare -a TEMP_DIRS=()
 declare -a ACTIONS=()
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
 BOOTSTRAP_PROFILE="${BOOTSTRAP_PROFILE:-microk8s-prod}"
 ARGOCD_ACCESS_MODE=""
 INSTALL_ENVOY=""
@@ -19,9 +22,9 @@ GITLAB_CLUSTER_REPO_AUTH_KEY=""
 GITLAB_REGISTRY_AUTH_KEY=""
 GITLAB_PAGES_HELM_REPO_KEY=""
 HELM_REGISTRY_URL=""
-APP_OF_APPS_REPO_URL=""
-APP_OF_APPS_TARGET_REVISION=""
-APP_OF_APPS_PATH=""
+CLUSTER_REPO_ROOT="${BOOTSTRAP_CLUSTER_REPO_ROOT:-${WORKSPACE_ROOT}/GitLab/ifpossible-sre/Clusters/microK8s}"
+APP_OF_APPS_MANIFEST_PATH=""
+APP_OF_APPS_MANIFEST_FILE=""
 ARGOCD_HOSTNAME_PREFIX="${BOOTSTRAP_ARGOCD_HOSTNAME_PREFIX:-argocd}"
 ARGOCD_PORT_FORWARD_PORT="${BOOTSTRAP_ARGOCD_PORT_FORWARD_PORT:-8080}"
 
@@ -131,9 +134,8 @@ configure_profile() {
     local profile_name="${1:-${BOOTSTRAP_PROFILE}}"
 
     BOOTSTRAP_PROFILE="${profile_name}"
-    APP_OF_APPS_REPO_URL="${BOOTSTRAP_APP_OF_APPS_REPO_URL:-https://gitlab.com/ifpossible-sre/clusters/microk8s.git}"
-    APP_OF_APPS_TARGET_REVISION="${BOOTSTRAP_APP_OF_APPS_TARGET_REVISION:-main}"
-    APP_OF_APPS_PATH="${BOOTSTRAP_APP_OF_APPS_PATH:-applications/dev}"
+    CLUSTER_REPO_ROOT="${BOOTSTRAP_CLUSTER_REPO_ROOT:-${WORKSPACE_ROOT}/GitLab/ifpossible-sre/Clusters/microK8s}"
+    APP_OF_APPS_MANIFEST_PATH="${BOOTSTRAP_APP_OF_APPS_MANIFEST_PATH:-cluster/dev/app-of-apps.yaml}"
     GITLAB_COMPONENTS_REPO_AUTH_KEY="${BOOTSTRAP_GITLAB_COMPONENTS_REPO_AUTH_KEY:-/microk8s/gitlab-kubecomp-repo-auth}"
     GITLAB_CLUSTER_REPO_AUTH_KEY="${BOOTSTRAP_GITLAB_CLUSTER_REPO_AUTH_KEY:-/microk8s/gitlab-cluster-repo-auth}"
     GITLAB_REGISTRY_AUTH_KEY="${BOOTSTRAP_GITLAB_REGISTRY_AUTH_KEY:-/microk8s/gitlab-registry-auth}"
@@ -158,6 +160,7 @@ configure_profile() {
             INSTALL_ARGOCD_DOMAIN_SECRET="true"
             DOMAIN_SECRET_REMOTE_KEY="${BOOTSTRAP_DOMAIN_SECRET_KEY:-/microk8s-lab/domain}"
             METALLB_ADDRESS_POOL="${BOOTSTRAP_METALLB_ADDRESS_POOL:-192.168.0.230-192.168.0.239}"
+            APP_OF_APPS_MANIFEST_PATH="${BOOTSTRAP_APP_OF_APPS_MANIFEST_PATH:-cluster/lab/app-of-apps.yaml}"
             ;;
         local-test)
             ARGOCD_ACCESS_MODE="port-forward"
@@ -166,7 +169,7 @@ configure_profile() {
             INSTALL_ARGOCD_DOMAIN_SECRET="false"
             DOMAIN_SECRET_REMOTE_KEY=""
             METALLB_ADDRESS_POOL=""
-            APP_OF_APPS_PATH="${BOOTSTRAP_APP_OF_APPS_PATH:-applications/local-test}"
+            APP_OF_APPS_MANIFEST_PATH="${BOOTSTRAP_APP_OF_APPS_MANIFEST_PATH:-cluster/local-test/app-of-apps.yaml}"
             ;;
         *)
             die "unknown profile '${profile_name}'. Expected one of: microk8s-prod, microk8s-lab, local-test."
@@ -175,16 +178,22 @@ configure_profile() {
 }
 
 require_profile_settings() {
-    if [ -z "${APP_OF_APPS_REPO_URL}" ]; then
-        die "APP_OF_APPS_REPO_URL is empty after configuring profile ${BOOTSTRAP_PROFILE}."
+    if [ -z "${CLUSTER_REPO_ROOT}" ]; then
+        die "CLUSTER_REPO_ROOT is empty after configuring profile ${BOOTSTRAP_PROFILE}."
     fi
 
-    if [ -z "${APP_OF_APPS_TARGET_REVISION}" ]; then
-        die "APP_OF_APPS_TARGET_REVISION is empty after configuring profile ${BOOTSTRAP_PROFILE}."
+    if [ ! -d "${CLUSTER_REPO_ROOT}" ]; then
+        die "CLUSTER_REPO_ROOT ${CLUSTER_REPO_ROOT} does not exist."
     fi
 
-    if [ -z "${APP_OF_APPS_PATH}" ]; then
-        die "APP_OF_APPS_PATH is empty after configuring profile ${BOOTSTRAP_PROFILE}."
+    if [ -z "${APP_OF_APPS_MANIFEST_PATH}" ]; then
+        die "APP_OF_APPS_MANIFEST_PATH is empty after configuring profile ${BOOTSTRAP_PROFILE}."
+    fi
+
+    APP_OF_APPS_MANIFEST_FILE="${CLUSTER_REPO_ROOT}/${APP_OF_APPS_MANIFEST_PATH}"
+
+    if [ ! -f "${APP_OF_APPS_MANIFEST_FILE}" ]; then
+        die "app-of-apps manifest ${APP_OF_APPS_MANIFEST_FILE} does not exist."
     fi
 
     if [ "${INSTALL_METALLB}" = "true" ] && [ -z "${METALLB_ADDRESS_POOL}" ]; then
@@ -963,51 +972,8 @@ EOF
 add_argocd_app_of_apps() {
     sleep 5
     echo "Adding ArgoCD application..."
-    # Create a temporary directory for Kustomize files
-    TEMP_DIR="$(create_temp_dir)"
-
-
-
-    # Create kustomization.yaml for ArgoCD
-    cat <<EOF > "$TEMP_DIR/kustomization.yaml"
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-namespace: argocd
-
-resources:
-- argocd-app.yaml
-EOF
-
-    # Create App file for ArgoCD app
-    cat <<EOF > "$TEMP_DIR/argocd-app.yaml"
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: app-of-apps
-  namespace: argocd
-  labels:
-    app.kubernetes.io/part-of: platform
-    app.kubernetes.io/name: app-of-apps
-spec:
-  project: default
-  source:
-    repoURL: ${APP_OF_APPS_REPO_URL}
-    targetRevision: ${APP_OF_APPS_TARGET_REVISION}
-    path: ${APP_OF_APPS_PATH}
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: argocd
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-EOF
-
-    # Install ArgoCD using kustomize
-    kubectl apply -k "$TEMP_DIR"
-
-        # Clean up the temporary directory
-    rm -rf "$TEMP_DIR"
+    echo "Applying tracked app-of-apps manifest ${APP_OF_APPS_MANIFEST_FILE}..."
+    kubectl apply -f "${APP_OF_APPS_MANIFEST_FILE}"
 
 }
 
@@ -1135,11 +1101,10 @@ Actions:
 
 Environment overrides:
   BOOTSTRAP_PROFILE
+  BOOTSTRAP_CLUSTER_REPO_ROOT
   BOOTSTRAP_METALLB_ADDRESS_POOL
   BOOTSTRAP_DOMAIN_SECRET_KEY
-  BOOTSTRAP_APP_OF_APPS_REPO_URL
-  BOOTSTRAP_APP_OF_APPS_TARGET_REVISION
-  BOOTSTRAP_APP_OF_APPS_PATH
+  BOOTSTRAP_APP_OF_APPS_MANIFEST_PATH
   BOOTSTRAP_GITLAB_COMPONENTS_REPO_AUTH_KEY
   BOOTSTRAP_GITLAB_CLUSTER_REPO_AUTH_KEY
   BOOTSTRAP_GITLAB_REGISTRY_AUTH_KEY

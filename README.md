@@ -70,7 +70,7 @@ Available actions:
 - skips `envoy`
 - skips `metallb`
 - skips the Argo CD domain `ExternalSecret`
-- points `app-of-apps` at `applications/local-test`
+- applies `cluster/local-test/app-of-apps.yaml`
 - exposes Argo CD through `kubectl port-forward` instructions instead of a
   Gateway hostname
 - intended for disposable clusters such as `minikube` where you want to verify
@@ -82,11 +82,10 @@ These environment variables let you keep the profile behavior while overriding
 the cluster-specific values:
 
 - `BOOTSTRAP_PROFILE`
+- `BOOTSTRAP_CLUSTER_REPO_ROOT`
 - `BOOTSTRAP_METALLB_ADDRESS_POOL`
 - `BOOTSTRAP_DOMAIN_SECRET_KEY`
-- `BOOTSTRAP_APP_OF_APPS_REPO_URL`
-- `BOOTSTRAP_APP_OF_APPS_TARGET_REVISION`
-- `BOOTSTRAP_APP_OF_APPS_PATH`
+- `BOOTSTRAP_APP_OF_APPS_MANIFEST_PATH`
 - `BOOTSTRAP_GITLAB_COMPONENTS_REPO_AUTH_KEY`
 - `BOOTSTRAP_GITLAB_CLUSTER_REPO_AUTH_KEY`
 - `BOOTSTRAP_GITLAB_REGISTRY_AUTH_KEY`
@@ -104,6 +103,16 @@ the cluster-specific values:
 
 The script also expects `kubectl` to be configured for the target cluster.
 
+`add-app-of-apps` also expects a local checkout of the cluster repo. By default
+it resolves that to:
+
+```text
+../GitLab/ifpossible-sre/Clusters/microK8s
+```
+
+relative to the bootstrap repo, and you can override it with
+`BOOTSTRAP_CLUSTER_REPO_ROOT`.
+
 ## Hardening Notes
 
 - strict shell mode is enabled
@@ -115,6 +124,6 @@ The script also expects `kubectl` to be configured for the target cluster.
 - cert-manager readiness now waits on the named deployments instead of selector-based pod discovery
 - repository/bootstrap operations are action-driven rather than enabled by editing `main()`
 - Argo CD exposure, MetalLB address pools, Akeyless secret paths, and the
-  app-of-apps source are all profile-driven instead of hard-coded inline
+  tracked app-of-apps manifest are all profile-driven instead of hard-coded inline
 - `add-gitlab-repos` now waits for the repository `ExternalSecret` objects to
   sync, restarts `argocd-repo-server`, and hard-refreshes `app-of-apps`
