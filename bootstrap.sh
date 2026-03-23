@@ -2,13 +2,80 @@
 # ####
 # ####
 
+set -euo pipefail
+
+declare -a TEMP_DIRS=()
+
+cleanup_temp_dirs() {
+    local temp_dir
+
+    for temp_dir in "${TEMP_DIRS[@]:-}"; do
+        if [ -n "${temp_dir}" ] && [ -d "${temp_dir}" ]; then
+            rm -rf "${temp_dir}"
+        fi
+    done
+}
+
+trap cleanup_temp_dirs EXIT
+
+create_temp_dir() {
+    local temp_dir
+
+    temp_dir="$(mktemp -d)"
+    TEMP_DIRS+=("${temp_dir}")
+    echo "Created temporary directory: ${temp_dir}" >&2
+    printf '%s\n' "${temp_dir}"
+}
+
+require_commands() {
+    local missing=0
+    local command_name
+
+    for command_name in kubectl mktemp base64; do
+        if ! command -v "${command_name}" >/dev/null 2>&1; then
+            echo "❌   Error: required command '${command_name}' is not installed."
+            missing=1
+        fi
+    done
+
+    if [ "${missing}" -ne 0 ]; then
+        exit 1
+    fi
+}
+
+require_cluster_access() {
+    if ! kubectl get namespace default >/dev/null 2>&1; then
+        echo "❌   Error: kubectl cannot reach the target cluster."
+        exit 1
+    fi
+}
+
+wait_for_secret() {
+    local namespace="$1"
+    local name="$2"
+    local timeout="${3:-120}"
+    local elapsed=0
+
+    echo "Waiting for secret ${name} in namespace ${namespace}..."
+
+    while ! kubectl get secret "${name}" -n "${namespace}" >/dev/null 2>&1; do
+        if [ "${elapsed}" -ge "${timeout}" ]; then
+            echo "❌   Error: secret ${name} in namespace ${namespace} did not become available within ${timeout}s."
+            exit 1
+        fi
+
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+}
+
 
 # Creates a returned line to be used to separate console logs!
 # ####
 # ####
 
 emptyline(){
-    echo "\n"
+    printf '\n'
 }
 
 # Function to validate required variables
@@ -42,10 +109,9 @@ validate_variables() {
 
 wait_for_deployment() {
     echo "Waiting for deployment $1 in namespace $2 to be ready..."
-    kubectl wait --for=condition=available --timeout=300s deployment/$1 -n $2
+    kubectl wait --for=condition=available --timeout=300s "deployment/$1" -n "$2"
 }
 
-# Function to create namespace if it doesn't exist
 
 waiting() {
     local seconds=$1
@@ -60,7 +126,7 @@ waiting() {
 
 
 create_namespace_if_not_exists() {
-    if ! kubectl get namespace "$1" &> /dev/null; then
+    if ! kubectl get namespace "$1" >/dev/null 2>&1; then
         echo "Creating namespace: $1"
         kubectl create namespace "$1"
     else
@@ -72,8 +138,7 @@ create_namespace_if_not_exists() {
 
 temp_dir() {
     # Create a temporary directory for Kustomize files
-    TEMP_DIR=$(mktemp -d)
-    echo "Created temporary directory: $TEMP_DIR"
+    TEMP_DIR="$(create_temp_dir)"
 }
 
 # install cert-manager
@@ -249,6 +314,7 @@ metadata:
     namespace: external-secrets
 type: Opaque
 stringData:
+# data:
     accessId: $AKEYLESS_ACCESS_ID
     accessType: "api_key"
     accessTypeParam: $AKEYLESS_ACCESS_SECRET_KEY
@@ -280,6 +346,17 @@ spec:
             namespace: external-secrets  # Specify the namespace of the Secret
 EOF
 
+  cat <<EOF > "$TEMP_DIR/clusterIssuer.yaml"
+# Clusterissuer
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: certymccertface
+spec:
+  selfSigned: {}
+EOF
+
+    kubectl apply -f "$TEMP_DIR/clusterIssuer.yaml"
     kubectl apply -f "$TEMP_DIR/akeylessSecret.yaml"
     kubectl apply -f "$TEMP_DIR/akeylessClusterStore.yaml"
 
@@ -345,8 +422,7 @@ install_metallb() {
                  --timeout=90s
 
     # Create a temporary directory for custom resources
-    TEMP_DIR=$(mktemp -d)
-    echo "Created temporary directory: $TEMP_DIR"
+    TEMP_DIR="$(create_temp_dir)"
 
     # Create ipPools.yaml
     cat <<EOF > "$TEMP_DIR/ipPools.yaml"
@@ -385,8 +461,7 @@ install_argocd_secret() {
     create_namespace_if_not_exists argocd
 
         # Create a temporary directory for Kustomize files
-    TEMP_DIR=$(mktemp -d)
-    echo "Created temporary directory: $TEMP_DIR"
+    TEMP_DIR="$(create_temp_dir)"
 
     # Create kustomization.yaml for ArgoCD
     cat <<EOF > "$TEMP_DIR/domainsecret.yaml"
@@ -423,15 +498,395 @@ EOF
 install_argocd() {
     echo "Installing ArgoCD..."
 
-    echo "Waiting for secret to become available..."
-    sleep 10  # Wait for 10 seconds to ensure secret is available
-
-    # Verify the secret exists before proceeding
-    kubectl get secret domain -n argocd
+    wait_for_secret argocd domain 120
 
     # Create a temporary directory for Kustomize files
-    TEMP_DIR=$(mktemp -d)
-    echo "Created temporary directory: $TEMP_DIR"
+    TEMP_DIR="$(create_temp_dir)"
+
+    # Create kustomization.yaml for ArgoCD
+    cat <<EOF > "$TEMP_DIR/kustomization.yaml"
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: argocd
+
+resources:
+- https://raw.githubusercontent.com/argoproj/argo-cd/v2.12.3/manifests/install.yaml
+- httproute.yaml
+
+
+patches:
+- patch: |-
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: argocd-cmd-params-cm
+    data:
+      server.insecure: "true"
+  target:
+    kind: ConfigMap
+    name: argocd-cmd-params-cm
+- patch: |-
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: argocd-cm
+      namespace: argocd
+      labels:
+        app.kubernetes.io/name: argocd-cm
+        app.kubernetes.io/part-of: argocd
+    data:
+      kustomize.buildOptions: |
+        --enable-helm
+  target:
+    kind: ConfigMap
+    name: argocd-cm
+
+- target:
+    group: gateway.networking.k8s.io
+    version: v1
+    kind: HTTPRoute
+    name: argocd-route
+    namespace: argocd
+  patch: |
+    - op: replace
+      path: /spec/rules/0/matches/0/headers/0/value
+      value: "argocd.$(kubectl get secret domain -n argocd -o jsonpath="{.data.domain}" | base64 --decode)"
+EOF
+    # Create httproute.yaml with valueFrom for the hostname
+    cat <<EOF > "$TEMP_DIR/httproute.yaml"
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: argocd-route
+  namespace: argocd
+spec:
+  parentRefs:
+  - name: tunnel-gateway
+    namespace: envoy-gateway-system
+  rules:
+  - matches:
+    - headers:
+      - name: "Host"
+        value: "meh"
+    backendRefs:
+    - name: argocd-server
+      port: 80
+      kind: Service
+EOF
+
+    # Create the namespace first
+    # kubectl apply -f "$TEMP_DIR/namespace.yaml"
+
+
+    # Install ArgoCD using kustomize
+    kubectl apply -k "$TEMP_DIR"
+
+    # Clean up the temporary directory
+    rm -rf "$TEMP_DIR"
+
+    echo "Waiting for ArgoCD server to be ready..."
+    kubectl wait --namespace argocd \
+                 --for=condition=available deployment \
+                 --selector=app.kubernetes.io/name=argocd-server \
+                 --timeout=300s
+
+    echo "✅ - ArgoCD installation and configuration completed!"
+    emptyline
+}
+
+add_gitlab_kube_comp_repo() {
+    echo "Adding gitlab repo secret..."
+    # Create a temporary directory for Kustomize files
+    TEMP_DIR="$(create_temp_dir)"
+
+
+
+    # Create kustomization.yaml for ArgoCD
+    cat <<EOF > "$TEMP_DIR/kustomization.yaml"
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: argocd
+
+resources:
+- gitlab-repos.yaml
+EOF
+    # Create external secret file for gitlab
+      cat <<EOF > "$TEMP_DIR/gitlab-repos.yaml"
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: components-repo-secret
+  namespace: argocd
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: akeyless-cluster-secret-store
+  target:
+    name: gitlab-repo-components-secret
+    creationPolicy: Owner
+    template:
+      type: Opaque
+      metadata:
+        labels:
+          argocd.argoproj.io/secret-type: repository
+      data:
+        # Create a custom configuration using fetched values
+        url: "{{ .url | toString }}"            # Repository URL
+        username: "{{ .username | toString }}"  # Username
+        password: "{{ .password | toString }}"  # Password
+        name: gitlab-repo-components            # Logical repository name
+        type: git                               # Repository type for ArgoCD
+  data:
+    - secretKey: url
+      remoteRef:
+        key: /microk8s/gitlab-kubecomp-repo-auth
+        property: url
+    - secretKey: username
+      remoteRef:
+        key: /microk8s/gitlab-kubecomp-repo-auth
+        property: username
+    - secretKey: password
+      remoteRef:
+        key: /microk8s/gitlab-kubecomp-repo-auth
+        property: token
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: cluster-repo-secret
+  namespace: argocd
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: akeyless-cluster-secret-store
+  target:
+    name: cluster-repo-secret
+    creationPolicy: Owner
+    template:
+      type: Opaque
+      metadata:
+        labels:
+          argocd.argoproj.io/secret-type: repository
+      data:
+        # Create a custom configuration using fetched values
+        url: "{{ .url | toString }}"            # Repository URL
+        username: "{{ .username | toString }}"  # Username
+        password: "{{ .password | toString }}"  # Password
+        name: cluster-repo-secret               # Logical repository name
+        type: git                               # Repository type for ArgoCD
+  data:
+    - secretKey: url
+      remoteRef:
+        key: /microk8s/gitlab-cluster-repo-auth
+        property: url
+    - secretKey: username
+      remoteRef:
+        key: /microk8s/gitlab-cluster-repo-auth
+        property: username
+    - secretKey: password
+      remoteRef:
+        key: /microk8s/gitlab-cluster-repo-auth
+        property: token
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: registry-secret
+  namespace: argocd
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: akeyless-cluster-secret-store
+  target:
+    name: gitlab-registry-secret
+    creationPolicy: Owner
+    template:
+      type: Opaque
+      metadata:
+        labels:
+          argocd.argoproj.io/secret-type: repository
+      data:
+        # Create a custom configuration using fetched values
+        url: registry.gitlab.com/ifpossible-sre/charts       # Registry URL
+        username: "{{ .username | toString }}"                        # Username
+        password: "{{ .password | toString }}"                        # Password
+        type: helm                                                    # Repository type for ArgoCD
+  data:
+    - secretKey: username
+      remoteRef:
+        key: /microk8s/gitlab-registry-auth
+        property: username
+    - secretKey: password
+      remoteRef:
+        key: /microk8s/gitlab-registry-auth
+        property: password
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: public-pages-helm-repo
+  namespace: argocd
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: akeyless-cluster-secret-store
+  target:
+    name: public-pages-helm-repo
+    creationPolicy: Owner
+    template:
+      type: Opaque
+      metadata:
+        labels:
+          argocd.argoproj.io/secret-type: repository
+      data:
+        url: "{{ .url }}"
+        type: helm
+  data:
+    - secretKey: url
+      remoteRef:
+        key: /microk8s/gitlab-pages-helm-repo
+        property: url
+
+EOF
+
+    # Install ArgoCD using kustomize
+    kubectl apply -k "$TEMP_DIR"
+
+        # Clean up the temporary directory
+    rm -rf "$TEMP_DIR"
+
+    
+}
+
+add_argocd_app_of_apps() {
+    sleep 5
+    echo "Adding ArgoCD application..."
+    # Create a temporary directory for Kustomize files
+    TEMP_DIR="$(create_temp_dir)"
+
+
+
+    # Create kustomization.yaml for ArgoCD
+    cat <<EOF > "$TEMP_DIR/kustomization.yaml"
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: argocd
+
+resources:
+- argocd-app.yaml
+EOF
+
+    # Create App file for ArgoCD app
+    cat <<EOF > "$TEMP_DIR/argocd-app.yaml"
+# apiVersion: argoproj.io/v1alpha1
+# kind: Application
+# metadata:
+#   name: argocd
+#   namespace: argocd
+# spec:
+#   project: default
+#   source:
+#     repoURL: $(kubectl get secret gitlab-repo-components-secret -n argocd -o jsonpath="{.data.url}" | base64 --decode)
+#     targetRevision: main
+#     path: argocd
+#   destination:
+#     server: https://kubernetes.default.svc
+#     namespace: argocd
+#   syncPolicy:
+#     automated:
+#       prune: true
+#       selfHeal: true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app-of-apps
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: platform
+    app.kubernetes.io/name: app-of-apps
+spec:
+  project: default
+  source:
+    repoURL: https://gitlab.com/ifpossible-sre/clusters/microk8s.git
+    targetRevision: main
+    path: applications/dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+EOF
+
+    # Install ArgoCD using kustomize
+    kubectl apply -k "$TEMP_DIR"
+
+        # Clean up the temporary directory
+    rm -rf "$TEMP_DIR"
+
+}
+
+remove_argocd_app() {
+    sleep 5
+    echo "Removing ArgoCD application..."
+    # Create a temporary directory for Kustomize files
+    TEMP_DIR="$(create_temp_dir)"
+
+
+
+    # Create kustomization.yaml for ArgoCD
+    cat <<EOF > "$TEMP_DIR/kustomization.yaml"
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: argocd
+
+resources:
+- argocd-app.yaml
+EOF
+
+    # Create App file for ArgoCD app
+    cat <<EOF > "$TEMP_DIR/argocd-app.yaml"
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: $(kubectl get secret gitlab-repo-components-secret -n argocd -o jsonpath="{.data.url}" | base64 --decode)
+    targetRevision: main
+    path: argocd
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+EOF
+
+    # Remove ArgoCD using kustomize
+    kubectl delete -k "$TEMP_DIR"
+
+        # Clean up the temporary directory
+    rm -rf "$TEMP_DIR"
+
+    echo "ArgoCD app removed from argocd"
+
+}
+
+uninstall_argocd() {
+    echo "Uninstalling ArgoCD..."
+
+    # Create a temporary directory for Kustomize files
+    TEMP_DIR="$(create_temp_dir)"
 
     # Create kustomization.yaml for ArgoCD
     cat <<EOF > "$TEMP_DIR/kustomization.yaml"
@@ -494,18 +949,14 @@ EOF
 
 
     # Install ArgoCD using kustomize
-    kubectl apply -k "$TEMP_DIR"
+    kubectl delete -k "$TEMP_DIR"
+    kubectl delete all --all -n argocd --force --grace-period=0
+    kubectl delete namespace argocd --wait=false
 
     # Clean up the temporary directory
     rm -rf "$TEMP_DIR"
 
-    echo "Waiting for ArgoCD server to be ready..."
-    kubectl wait --namespace argocd \
-                 --for=condition=available deployment \
-                 --selector=app.kubernetes.io/name=argocd-server \
-                 --timeout=300s
-
-    echo "✅ - ArgoCD installation and configuration completed!"
+    echo "✅ - ArgoCD uninstallation completed!"
     emptyline
 }
 
@@ -521,27 +972,151 @@ get_argocd_password() {
   emptyline
 
 }
+
+usage() {
+  cat <<'EOF'
+Usage:
+  ./bootstrap.sh <action> [<action>...]
+
+Actions:
+  install-cert-manager
+  uninstall-cert-manager
+  install-external-secrets
+  uninstall-external-secrets
+  install-secret-store
+  install-envoy
+  install-metallb
+  install-argocd-secret
+  install-argocd
+  add-gitlab-repos
+  add-app-of-apps
+  remove-argocd-app
+  uninstall-argocd
+  get-argocd-password
+  full-install
+  full-uninstall
+  help
+EOF
+}
+
+action_requires_akeyless() {
+  local action="$1"
+
+  case "$action" in
+    install-secret-store|full-install)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+run_action_sequence() {
+  local action
+
+  for action in "$@"; do
+    run_action "$action"
+  done
+}
+
+run_action() {
+  local action="$1"
+
+  case "$action" in
+    install-cert-manager)
+      install_cert_manager
+      ;;
+    uninstall-cert-manager)
+      uninstall_cert_manager
+      ;;
+    install-external-secrets)
+      install_external_secrets
+      ;;
+    uninstall-external-secrets)
+      uninstall_external_secrets
+      ;;
+    install-secret-store)
+      install_secret_clusterStore_external_secrets
+      ;;
+    install-envoy)
+      install_envoy
+      ;;
+    install-metallb)
+      install_metallb
+      ;;
+    install-argocd-secret)
+      install_argocd_secret
+      ;;
+    install-argocd)
+      install_argocd
+      ;;
+    add-gitlab-repos)
+      add_gitlab_kube_comp_repo
+      ;;
+    add-app-of-apps)
+      add_argocd_app_of_apps
+      ;;
+    remove-argocd-app)
+      remove_argocd_app
+      ;;
+    uninstall-argocd)
+      uninstall_argocd
+      ;;
+    get-argocd-password)
+      get_argocd_password
+      ;;
+    full-install)
+      run_action_sequence \
+        install-cert-manager \
+        install-external-secrets \
+        install-secret-store \
+        install-envoy \
+        install-metallb \
+        install-argocd-secret \
+        install-argocd \
+        add-gitlab-repos \
+        add-app-of-apps \
+        get-argocd-password
+      ;;
+    full-uninstall)
+      run_action_sequence \
+        remove-argocd-app \
+        uninstall-argocd \
+        uninstall-external-secrets \
+        uninstall-cert-manager
+      ;;
+    help|-h|--help)
+      usage
+      ;;
+    *)
+      echo "❌   Error: unknown action '${action}'."
+      usage
+      exit 1
+      ;;
+  esac
+}
+
 # Main execution
 main() {
+  local action
 
 
-# Call the validation function
-  validate_variables
+  require_commands
+  require_cluster_access
+  if [ "$#" -eq 0 ]; then
+    usage
+    exit 1
+  fi
 
-# UNINSTALL
-  # uninstall_cert_manager
-  # uninstall_external_secrets
+  for action in "$@"; do
+    if action_requires_akeyless "$action"; then
+      validate_variables
+      break
+    fi
+  done
 
-# INSTALL
-  # install_cert_manager
-  # install_external_secrets
-  # install_secret_clusterStore_external_secrets
-  # install_envoy
-  # install_metallb
-  # install_argocd_secret
-  install_argocd
-  get_argocd_password
-
+  run_action_sequence "$@"
 
 }
 
