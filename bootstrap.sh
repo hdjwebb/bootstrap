@@ -166,6 +166,7 @@ configure_profile() {
             INSTALL_ARGOCD_DOMAIN_SECRET="false"
             DOMAIN_SECRET_REMOTE_KEY=""
             METALLB_ADDRESS_POOL=""
+            APP_OF_APPS_PATH="${BOOTSTRAP_APP_OF_APPS_PATH:-applications/local-test}"
             ;;
         *)
             die "unknown profile '${profile_name}'. Expected one of: microk8s-prod, microk8s-lab, local-test."

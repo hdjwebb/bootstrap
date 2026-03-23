@@ -32,3 +32,9 @@
 - [x] Add a regression test that proves `add-gitlab-repos` waits for repo ExternalSecrets and refreshes Argo CD.
 - [x] Teach `add-gitlab-repos` to wait for repository credential sync before finishing.
 - [x] Restart `argocd-repo-server` and hard-refresh `app-of-apps` after repository credentials change.
+
+## 2026-03-23 Local-Test App Alignment
+
+- [x] Add a regression test that proves the `local-test` profile points `app-of-apps` at `applications/local-test`.
+- [x] Stop `local-test` from reconciling the full `applications/dev` stack on disposable clusters.
+- [x] Document the dedicated local-test app-of-apps path in the operator README.
