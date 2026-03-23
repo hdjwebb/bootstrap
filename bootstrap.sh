@@ -221,8 +221,17 @@ configure_profile() {
             METALLB_ADDRESS_POOL=""
             APP_OF_APPS_MANIFEST_PATH="${BOOTSTRAP_APP_OF_APPS_MANIFEST_PATH:-cluster/local-test/app-of-apps.yaml}"
             ;;
+        local-test-plus)
+            ARGOCD_ACCESS_MODE="port-forward"
+            INSTALL_ENVOY="false"
+            INSTALL_METALLB="false"
+            INSTALL_ARGOCD_DOMAIN_SECRET="false"
+            DOMAIN_SECRET_REMOTE_KEY=""
+            METALLB_ADDRESS_POOL=""
+            APP_OF_APPS_MANIFEST_PATH="${BOOTSTRAP_APP_OF_APPS_MANIFEST_PATH:-cluster/local-test-plus/app-of-apps.yaml}"
+            ;;
         *)
-            die "unknown profile '${profile_name}'. Expected one of: microk8s-prod, microk8s-lab, local-test."
+            die "unknown profile '${profile_name}'. Expected one of: microk8s-prod, microk8s-lab, local-test, local-test-plus."
             ;;
     esac
 }
@@ -1066,6 +1075,7 @@ Profiles:
   microk8s-prod
   microk8s-lab
   local-test
+  local-test-plus
 
 Actions:
   install-cert-manager

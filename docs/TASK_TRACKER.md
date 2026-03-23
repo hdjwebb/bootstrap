@@ -64,3 +64,9 @@
 - [x] Replace broad Argo CD force-delete behavior with tracked manifest deletion plus namespace-deletion waits.
 - [x] Delete Argo CD `Application` resources and clear stuck finalizers before uninstalling the Argo CD control plane.
 - [x] Remove the dead `waiting()` helper and consolidate uninstall polling on `wait_for_namespace_deletion()`.
+
+## 2026-03-23 Local-Test-Plus Profile
+
+- [x] Add regressions that fail unless bootstrap exposes a tracked `local-test-plus` profile.
+- [x] Add a disposable `local-test-plus` root manifest in the cluster repo for a wider minikube-safe child-app set.
+- [x] Document the difference between `local-test` and `local-test-plus` for operators.

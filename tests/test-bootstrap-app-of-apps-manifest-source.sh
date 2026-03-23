@@ -31,6 +31,7 @@ ADD_APP_FUNCTION="$(sed -n '/^add_argocd_app_of_apps()/,/^remove_argocd_app()/p'
 assert_profile_value "microk8s-prod" "APP_OF_APPS_MANIFEST_PATH" "cluster/dev/app-of-apps.yaml"
 assert_profile_value "microk8s-lab" "APP_OF_APPS_MANIFEST_PATH" "cluster/lab/app-of-apps.yaml"
 assert_profile_value "local-test" "APP_OF_APPS_MANIFEST_PATH" "cluster/local-test/app-of-apps.yaml"
+assert_profile_value "local-test-plus" "APP_OF_APPS_MANIFEST_PATH" "cluster/local-test-plus/app-of-apps.yaml"
 
 if ! printf '%s\n' "$ADD_APP_FUNCTION" | rg -q 'kubectl apply -f "\$\{APP_OF_APPS_MANIFEST_FILE\}"'; then
   echo "FAIL: add_argocd_app_of_apps should apply a tracked manifest file directly"

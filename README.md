@@ -7,6 +7,7 @@ can target:
 - `microk8s-prod`
 - `microk8s-lab`
 - `local-test`
+- `local-test-plus`
 
 ## What It Installs
 
@@ -28,6 +29,7 @@ Run the script with one or more explicit actions:
 ./bootstrap.sh --profile microk8s-prod install-argocd-secret install-argocd add-gitlab-repos add-app-of-apps
 ./bootstrap.sh --profile microk8s-lab full-install
 ./bootstrap.sh --profile local-test full-install
+./bootstrap.sh --profile local-test-plus full-install
 ```
 
 Available actions:
@@ -75,6 +77,18 @@ Available actions:
   Gateway hostname
 - intended for disposable clusters such as `minikube` where you want to verify
   the bootstrap flow without the production ingress/load-balancer stack
+
+### `local-test-plus`
+
+- keeps the same disposable access model as `local-test`
+- skips `envoy`
+- skips `metallb`
+- skips the Argo CD domain `ExternalSecret`
+- applies `cluster/local-test-plus/app-of-apps.yaml`
+- reconciles a wider child-app set on disposable clusters:
+  - `argocd`
+  - `cert-manager`
+  - `metrics-server`
 
 ## Profile Overrides
 

@@ -40,6 +40,7 @@ assert_contains '--profile <name>' "bootstrap.sh should document the profile fla
 assert_contains 'microk8s-prod' "bootstrap.sh should expose the microk8s-prod profile"
 assert_contains 'microk8s-lab' "bootstrap.sh should expose the microk8s-lab profile"
 assert_contains 'local-test' "bootstrap.sh should expose the local-test profile"
+assert_contains 'local-test-plus' "bootstrap.sh should expose the local-test-plus profile"
 
 assert_profile_value "microk8s-prod" "ARGOCD_ACCESS_MODE" "gateway"
 assert_profile_value "microk8s-prod" "DOMAIN_SECRET_REMOTE_KEY" "/microk8s/domain"
@@ -52,8 +53,12 @@ assert_profile_value "microk8s-lab" "METALLB_ADDRESS_POOL" "192.168.0.230-192.16
 assert_profile_value "local-test" "ARGOCD_ACCESS_MODE" "port-forward"
 assert_profile_value "local-test" "INSTALL_ENVOY" "false"
 assert_profile_value "local-test" "INSTALL_METALLB" "false"
+assert_profile_value "local-test-plus" "ARGOCD_ACCESS_MODE" "port-forward"
+assert_profile_value "local-test-plus" "INSTALL_ENVOY" "false"
+assert_profile_value "local-test-plus" "INSTALL_METALLB" "false"
 assert_profile_value "microk8s-prod" "APP_OF_APPS_MANIFEST_PATH" "cluster/dev/app-of-apps.yaml"
 assert_profile_value "microk8s-lab" "APP_OF_APPS_MANIFEST_PATH" "cluster/lab/app-of-apps.yaml"
 assert_profile_value "local-test" "APP_OF_APPS_MANIFEST_PATH" "cluster/local-test/app-of-apps.yaml"
+assert_profile_value "local-test-plus" "APP_OF_APPS_MANIFEST_PATH" "cluster/local-test-plus/app-of-apps.yaml"
 
 echo "PASS: bootstrap profile support checks passed"

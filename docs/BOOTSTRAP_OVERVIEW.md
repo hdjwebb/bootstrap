@@ -16,11 +16,12 @@ needed for the GitOps flow:
 
 ## Profiles
 
-The script now exposes three profiles:
+The script now exposes four profiles:
 
 - `microk8s-prod` for the current production bootstrap flow
 - `microk8s-lab` for a second microk8s-like environment with separate defaults
 - `local-test` for disposable local validation without the load balancer stack
+- `local-test-plus` for disposable local validation with a wider but still minikube-safe child-app set
 
 Each profile can be overridden through environment variables, but the operator
 does not need to edit the script to switch between environments.
