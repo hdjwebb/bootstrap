@@ -29,6 +29,7 @@ assert_contains() {
 
 assert_not_contains "$ADD_APP_FUNCTION" 'repoURL: \$\(kubectl get secret gitlab-repo-components-secret' "bootstrap.sh should not execute a dead secret lookup inside add-app-of-apps"
 assert_contains "$ADD_APP_FUNCTION" '^add_argocd_app_of_apps\(\)' "bootstrap.sh should define add_argocd_app_of_apps"
-assert_contains "$ADD_APP_FUNCTION" 'repoURL: \$\{APP_OF_APPS_REPO_URL\}' "bootstrap.sh should render app-of-apps from the profile-configured repository URL"
+assert_contains "$ADD_APP_FUNCTION" 'kubectl apply -f "\$\{APP_OF_APPS_MANIFEST_FILE\}"' "bootstrap.sh should apply the tracked app-of-apps manifest file"
+assert_not_contains "$ADD_APP_FUNCTION" 'repoURL: \$\{APP_OF_APPS_REPO_URL\}' "bootstrap.sh should not render inline app-of-apps repository YAML"
 
 echo "PASS: bootstrap app-of-apps template checks passed"

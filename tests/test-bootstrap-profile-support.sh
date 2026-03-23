@@ -52,6 +52,8 @@ assert_profile_value "microk8s-lab" "METALLB_ADDRESS_POOL" "192.168.0.230-192.16
 assert_profile_value "local-test" "ARGOCD_ACCESS_MODE" "port-forward"
 assert_profile_value "local-test" "INSTALL_ENVOY" "false"
 assert_profile_value "local-test" "INSTALL_METALLB" "false"
-assert_profile_value "local-test" "APP_OF_APPS_PATH" "applications/local-test"
+assert_profile_value "microk8s-prod" "APP_OF_APPS_MANIFEST_PATH" "cluster/dev/app-of-apps.yaml"
+assert_profile_value "microk8s-lab" "APP_OF_APPS_MANIFEST_PATH" "cluster/lab/app-of-apps.yaml"
+assert_profile_value "local-test" "APP_OF_APPS_MANIFEST_PATH" "cluster/local-test/app-of-apps.yaml"
 
 echo "PASS: bootstrap profile support checks passed"
