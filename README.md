@@ -31,6 +31,7 @@ Run the script with one or more explicit actions:
 ./bootstrap.sh --profile local-test full-install
 ./bootstrap.sh --profile local-test-plus full-install
 ./scripts/rehearse-minikube-local-test-plus.sh
+BOOTSTRAP_REHEARSAL_CYCLES=5 ./scripts/rehearse-minikube-local-test-plus.sh
 ```
 
 Available actions:

@@ -76,4 +76,4 @@
 - [x] Add a regression test that fails unless bootstrap can load Akeyless credentials from macOS Keychain when the shell variables are unset.
 - [x] Add a dedicated `minikube` rehearsal script that tears the cluster down, brings it back up, runs `local-test-plus`, and captures failure diagnostics.
 - [x] Document the Keychain fallback and the destructive rehearsal entrypoint so operators can rerun the exact reliability check.
-- [ ] Run repeated destructive `minikube` rehearsals and fix any failures they expose.
+- [x] Run repeated destructive `minikube` rehearsals and fix any failures they expose.
