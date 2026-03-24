@@ -90,3 +90,7 @@
 - [x] Block `install-secret-store` on cert-manager and external-secrets webhook CA bundle injection so immediate reinstall no longer fails with webhook trust errors.
 - [x] Extend the destructive `minikube` rehearsal so each cycle proves `full-install`, `full-uninstall`, cleanup verification, and immediate reinstall on the same cluster.
 - [x] Add coverage that fails unless the rehearsal script exercises uninstall plus reinstall, not just fresh-cluster bring-up.
+- [x] Capture the transient cert-manager uninstall transport failure seen against the loopback minikube apiserver as a regression.
+- [x] Retry retryable `kubectl apply/delete` transport failures so teardown does not abort on a short-lived apiserver disconnect or EOF.
+- [x] Fix the shared kubectl retry helper so non-retryable errors still fail instead of being masked by the shell `if` exit-status edge case.
+- [x] Tolerate missing-API discovery errors on replayed uninstall manifest deletes after a retryable partial teardown removes the relevant CRDs first.

@@ -52,6 +52,20 @@ waits for the cert-manager and external-secrets validating webhook CA bundles
 before it creates webhook-validated custom resources, which removes the
 reinstall race seen immediately after a destructive teardown.
 
+That same proof also turned up a second class of disposable-cluster failure:
+the minikube kubeconfig points at a loopback API server port, and brief control
+plane disconnects can surface as `connect: connection refused` or `unexpected
+EOF` during manifest-based `kubectl apply/delete` operations. Bootstrap now
+retries those transport-level failures instead of aborting the teardown on the
+first dropped connection.
+
+One extra teardown edge came out of that work: if a delete partially succeeds
+before the connection drops, replaying the same manifest delete can hit
+`unable to recognize` / `the server could not find the requested resource`
+because the CRDs were already removed by the first attempt. The uninstall paths
+now treat that specific replay state as ignorable and continue to namespace
+cleanup.
+
 That same uninstall/reinstall investigation also exposed transient `kubectl`
 transport failures during manifest deletion on `minikube`. The bootstrap now
 retries manifest-based `kubectl apply/delete` operations when they fail with

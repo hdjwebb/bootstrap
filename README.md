@@ -163,6 +163,14 @@ relative to the bootstrap repo, and you can override it with
   webhook CA bundle injection before creating webhook-validated custom
   resources, which prevents immediate uninstall/reinstall failures on
   disposable clusters
+- manifest-based `kubectl apply/delete` steps now retry transport-level
+  failures such as loopback apiserver connection refusals and unexpected EOFs,
+  which prevents short-lived minikube control-plane disconnects from aborting
+  teardown or reinstall
+- uninstall manifest deletes now also tolerate follow-up missing-API discovery
+  errors after a retryable partial teardown has already removed the referenced
+  CRDs, so the script can continue to namespace cleanup instead of failing on a
+  replayed delete
 - uninstall paths now wait for namespace deletion instead of relying on broad
   force-delete fallbacks
 - Argo CD uninstall now deletes `Application` resources and clears stuck Argo

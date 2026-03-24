@@ -13,6 +13,38 @@ wait_for_cluster_ready() {
   kubectl wait --for=condition=Ready node --all --timeout=180s
 }
 
+wait_for_namespace_deleted() {
+  local namespace="$1"
+  local timeout="${2:-180}"
+  local elapsed=0
+
+  while kubectl get namespace "${namespace}" >/dev/null 2>&1; do
+    if [ "${elapsed}" -ge "${timeout}" ]; then
+      echo "Namespace ${namespace} was not deleted within ${timeout}s." >&2
+      return 1
+    fi
+
+    sleep 2
+    elapsed=$((elapsed + 2))
+  done
+}
+
+wait_for_crd_deleted() {
+  local crd_name="$1"
+  local timeout="${2:-180}"
+  local elapsed=0
+
+  while kubectl get crd "${crd_name}" >/dev/null 2>&1; do
+    if [ "${elapsed}" -ge "${timeout}" ]; then
+      echo "CRD ${crd_name} was not deleted within ${timeout}s." >&2
+      return 1
+    fi
+
+    sleep 2
+    elapsed=$((elapsed + 2))
+  done
+}
+
 load_akeyless_credentials() {
   if [ -n "${AKEYLESS_ACCESS_ID:-}" ] && [ -n "${AKEYLESS_ACCESS_SECRET_KEY:-}" ]; then
     return 0
@@ -79,6 +111,21 @@ wait_for_expected_apps() {
   done
 }
 
+verify_stack_removed() {
+  local namespace
+  local crd_name
+
+  for namespace in argocd cert-manager external-secrets; do
+    echo "Waiting for namespace ${namespace} to be deleted..."
+    wait_for_namespace_deleted "${namespace}" 180
+  done
+
+  for crd_name in applications.argoproj.io externalsecrets.external-secrets.io clustersecretstores.external-secrets.io clusterissuers.cert-manager.io; do
+    echo "Waiting for CRD ${crd_name} to be deleted..."
+    wait_for_crd_deleted "${crd_name}" 180
+  done
+}
+
 main() {
   local cycle
 
@@ -96,9 +143,36 @@ main() {
     wait_for_cluster_ready
 
     echo "=== Cycle ${cycle}/${CYCLES}: bootstrap full-install ==="
-    bash "${BOOTSTRAP_SCRIPT}" --profile local-test-plus full-install
+    if ! bash "${BOOTSTRAP_SCRIPT}" --profile local-test-plus full-install; then
+      dump_failure_state
+      exit 1
+    fi
 
     echo "=== Cycle ${cycle}/${CYCLES}: verify applications ==="
+    if ! wait_for_expected_apps; then
+      dump_failure_state
+      exit 1
+    fi
+
+    echo "=== Cycle ${cycle}/${CYCLES}: bootstrap full-uninstall ==="
+    if ! bash "${BOOTSTRAP_SCRIPT}" --profile local-test-plus full-uninstall; then
+      dump_failure_state
+      exit 1
+    fi
+
+    echo "=== Cycle ${cycle}/${CYCLES}: verify uninstall cleanup ==="
+    if ! verify_stack_removed; then
+      dump_failure_state
+      exit 1
+    fi
+
+    echo "=== Cycle ${cycle}/${CYCLES}: bootstrap full-install reinstall ==="
+    if ! bash "${BOOTSTRAP_SCRIPT}" --profile local-test-plus full-install; then
+      dump_failure_state
+      exit 1
+    fi
+
+    echo "=== Cycle ${cycle}/${CYCLES}: verify applications after reinstall ==="
     if ! wait_for_expected_apps; then
       dump_failure_state
       exit 1
