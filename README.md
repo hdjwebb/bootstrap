@@ -167,8 +167,15 @@ relative to the bootstrap repo, and you can override it with
   force-delete fallbacks
 - Argo CD uninstall now deletes `Application` resources and clears stuck Argo
   finalizers before removing the control plane
+- `full-uninstall` now safely skips root app deletion when the Argo CD
+  `Application` CRD is not installed, which matters for partial or failed local
+  reinstalls
+- manifest-based `kubectl apply/delete` operations now retry transient
+  transport failures such as `connection refused` and `unexpected EOF`, which
+  showed up during live cert-manager uninstall/reinstall testing on `minikube`
 - `scripts/rehearse-minikube-local-test-plus.sh` now gives the repo a single
   destructive rehearsal entrypoint that tears down `minikube`, boots a fresh
-  cluster, runs `local-test-plus`, waits for the expected Argo apps to become
-  `Synced/Healthy`, and dumps pod/application/ExternalSecret diagnostics if a
-  cycle fails
+  cluster, runs `local-test-plus`, verifies the expected Argo apps become
+  `Synced/Healthy`, runs `full-uninstall`, verifies the managed namespaces and
+  key CRDs are gone, then immediately reinstalls and verifies the stack again;
+  if any phase fails it dumps pod/application/ExternalSecret diagnostics

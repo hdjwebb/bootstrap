@@ -41,14 +41,22 @@ The repo also now carries a destructive rehearsal script,
 `scripts/rehearse-minikube-local-test-plus.sh`, which is intended to be the
 standard repeatability check for disposable local clusters. It tears down
 `minikube`, starts a fresh cluster, runs `local-test-plus`, waits for the
-expected Argo applications to converge, and dumps application, ExternalSecret,
-and pod diagnostics if anything fails.
+expected Argo applications to converge, then exercises `full-uninstall`,
+verifies the managed namespaces and key CRDs are gone, and immediately runs the
+reinstall on the same cluster. If anything fails it dumps application,
+ExternalSecret, and pod diagnostics.
 
 Recent reinstall investigation also exposed that webhook-serving deployments can
 be `Available` before their admission CA bundles are injected. The bootstrap now
 waits for the cert-manager and external-secrets validating webhook CA bundles
 before it creates webhook-validated custom resources, which removes the
 reinstall race seen immediately after a destructive teardown.
+
+That same uninstall/reinstall investigation also exposed transient `kubectl`
+transport failures during manifest deletion on `minikube`. The bootstrap now
+retries manifest-based `kubectl apply/delete` operations when they fail with
+transport errors such as `connection refused` or `unexpected EOF`, instead of
+aborting the whole run on the first disconnect.
 
 ## Current Hardening Work
 

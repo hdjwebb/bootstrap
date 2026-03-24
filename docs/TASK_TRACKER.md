@@ -77,6 +77,16 @@
 - [x] Add a dedicated `minikube` rehearsal script that tears the cluster down, brings it back up, runs `local-test-plus`, and captures failure diagnostics.
 - [x] Document the Keychain fallback and the destructive rehearsal entrypoint so operators can rerun the exact reliability check.
 - [x] Run repeated destructive `minikube` rehearsals and fix any failures they expose.
+
+## 2026-03-24 Uninstall/Reinstall Reliability
+
+- [x] Reproduce a live `full-uninstall` -> `full-install` failure on `minikube`.
+- [x] Add a regression test that fails unless `remove-argocd-app` skips cleanly when the Argo `Application` CRD is absent.
+- [x] Rerun the live uninstall/reinstall proof after the new Argo app-removal guard and fix the cert-manager webhook CA race it exposed.
+- [x] Add a regression test that fails unless transient manifest transport failures are retried during cert-manager uninstall.
+- [ ] Rerun the live uninstall/reinstall proof after manifest retry hardening and fix any next failure it exposes.
 - [x] Reproduce the uninstall/reinstall path on a live `minikube` cluster instead of inferring reliability from install-only rehearsal.
 - [x] Add a regression test that fails unless `install-secret-store` waits for webhook CA bundle injection before creating webhook-validated custom resources.
 - [x] Block `install-secret-store` on cert-manager and external-secrets webhook CA bundle injection so immediate reinstall no longer fails with webhook trust errors.
+- [x] Extend the destructive `minikube` rehearsal so each cycle proves `full-install`, `full-uninstall`, cleanup verification, and immediate reinstall on the same cluster.
+- [x] Add coverage that fails unless the rehearsal script exercises uninstall plus reinstall, not just fresh-cluster bring-up.

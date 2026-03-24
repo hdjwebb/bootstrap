@@ -166,6 +166,50 @@ wait_for_webhook_ca_bundle() {
     done
 }
 
+kubectl_error_is_retryable() {
+    local output="$1"
+
+    case "${output}" in
+        *"connect: connection refused"*|*"unexpected EOF"*|*"connection reset by peer"*|*"i/o timeout"*|*"TLS handshake timeout"*|*"Service Unavailable"*|*"service unavailable"*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+run_kubectl_with_retry() {
+    local max_attempts="${BOOTSTRAP_KUBECTL_RETRY_ATTEMPTS:-5}"
+    local retry_delay="${BOOTSTRAP_KUBECTL_RETRY_DELAY_SECONDS:-2}"
+    local attempt=1
+    local output=""
+    local exit_code=0
+
+    while true; do
+        if output="$(kubectl "$@" 2>&1)"; then
+            if [ -n "${output}" ]; then
+                printf '%s\n' "${output}"
+            fi
+            return 0
+        fi
+
+        exit_code=$?
+
+        if ! kubectl_error_is_retryable "${output}" || [ "${attempt}" -ge "${max_attempts}" ]; then
+            if [ -n "${output}" ]; then
+                printf '%s\n' "${output}" >&2
+            fi
+            return "${exit_code}"
+        fi
+
+        printf '%s\n' "${output}" >&2
+        echo "Retrying kubectl $1 after transient transport failure (${attempt}/${max_attempts})..." >&2
+        sleep "${retry_delay}"
+        attempt=$((attempt + 1))
+    done
+}
+
 delete_argocd_applications() {
     local timeout="${1:-180}"
     local elapsed=0
@@ -359,6 +403,10 @@ refresh_argocd_application_if_present() {
     fi
 }
 
+argocd_application_crd_installed() {
+    kubectl get crd applications.argoproj.io >/dev/null 2>&1
+}
+
 write_argocd_kustomization() {
     local temp_dir="$1"
 
@@ -550,7 +598,7 @@ install_cert_manager() {
     create_namespace_if_not_exists cert-manager
     
     # Apply the cert-manager manifest
-    kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.yaml
+    run_kubectl_with_retry apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.yaml
     
     echo "Waiting for cert-manager deployments to be ready..."
     wait_for_deployment cert-manager cert-manager
@@ -571,7 +619,7 @@ uninstall_cert_manager() {
     echo "Uninstalling cert-manager..."
     
     # Delete all cert-manager resources
-    kubectl delete -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.yaml --ignore-not-found=true
+    run_kubectl_with_retry delete -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.yaml --ignore-not-found=true
 
     kubectl delete namespace cert-manager --ignore-not-found=true --wait=false
     wait_for_namespace_deletion cert-manager 180
@@ -651,7 +699,7 @@ images:
    newTag: v0.10.4
 EOF
 
-    kubectl apply -k "$TEMP_DIR"
+    run_kubectl_with_retry apply -k "$TEMP_DIR"
     rm -rf "$TEMP_DIR"
     
     echo "Waiting for external-secrets deployments to be ready..."
@@ -666,7 +714,7 @@ EOF
 uninstall_external_secrets() {
     echo "Uninstalling external-secrets..."
 
-    kubectl delete -f https://github.com/external-secrets/external-secrets/releases/download/v0.10.4/external-secrets.yaml --ignore-not-found=true
+    run_kubectl_with_retry delete -f https://github.com/external-secrets/external-secrets/releases/download/v0.10.4/external-secrets.yaml --ignore-not-found=true
     kubectl delete namespace external-secrets --ignore-not-found=true --wait=false
     wait_for_namespace_deletion external-secrets 180
 
@@ -736,9 +784,9 @@ spec:
   selfSigned: {}
 EOF
 
-    kubectl apply -f "$TEMP_DIR/clusterIssuer.yaml"
-    kubectl apply -f "$TEMP_DIR/akeylessSecret.yaml"
-    kubectl apply -f "$TEMP_DIR/akeylessClusterStore.yaml"
+    run_kubectl_with_retry apply -f "$TEMP_DIR/clusterIssuer.yaml"
+    run_kubectl_with_retry apply -f "$TEMP_DIR/akeylessSecret.yaml"
+    run_kubectl_with_retry apply -f "$TEMP_DIR/akeylessClusterStore.yaml"
 
     echo "✅ - clusterStore external_secrets created"
 
@@ -753,7 +801,7 @@ install_envoy() {
 
     echo "Installing Envoy Gateway..."
 # Install Envoy Gateway
-kubectl apply -f https://github.com/envoyproxy/gateway/releases/download/v1.1.0/install.yaml --server-side
+run_kubectl_with_retry apply -f https://github.com/envoyproxy/gateway/releases/download/v1.1.0/install.yaml --server-side
 
 wait_for_deployment envoy-gateway envoy-gateway-system
 
@@ -801,7 +849,7 @@ install_metallb() {
     create_namespace_if_not_exists metallb-system
 
     # Apply MetalLB manifest (which includes CRDs)
-    kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.8/config/manifests/metallb-native.yaml
+    run_kubectl_with_retry apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.8/config/manifests/metallb-native.yaml
 
     echo "Waiting for MetalLB CRDs to be established..."
     kubectl wait --for condition=established --timeout=60s crd/ipaddresspools.metallb.io
@@ -836,7 +884,7 @@ spec: {}
 EOF
 
     # Apply custom resources
-    kubectl apply -f "$TEMP_DIR/ipPools.yaml"
+    run_kubectl_with_retry apply -f "$TEMP_DIR/ipPools.yaml"
 
     # Clean up the temporary directory
     rm -rf "$TEMP_DIR"
@@ -880,7 +928,7 @@ spec:
 EOF
 
     # Apply custom resources
-    kubectl apply -f "$TEMP_DIR/domainsecret.yaml"
+    run_kubectl_with_retry apply -f "$TEMP_DIR/domainsecret.yaml"
 
     # Clean up the temporary directory
     rm -rf "$TEMP_DIR"
@@ -909,7 +957,7 @@ install_argocd() {
 
 
     # Install ArgoCD using kustomize
-    kubectl apply -k "$TEMP_DIR"
+    run_kubectl_with_retry apply -k "$TEMP_DIR"
 
     # Clean up the temporary directory
     rm -rf "$TEMP_DIR"
@@ -1083,7 +1131,7 @@ spec:
 EOF
 
     # Install ArgoCD using kustomize
-    kubectl apply -k "$TEMP_DIR"
+    run_kubectl_with_retry apply -k "$TEMP_DIR"
 
     wait_for_externalsecret_ready argocd components-repo-secret 120
     wait_for_externalsecret_ready argocd cluster-repo-secret 120
@@ -1101,14 +1149,20 @@ EOF
 add_argocd_app_of_apps() {
     echo "Adding ArgoCD application..."
     echo "Applying tracked app-of-apps manifest ${APP_OF_APPS_MANIFEST_FILE}..."
-    kubectl apply -f "${APP_OF_APPS_MANIFEST_FILE}"
+    run_kubectl_with_retry apply -f "${APP_OF_APPS_MANIFEST_FILE}"
 
 }
 
 remove_argocd_app() {
     echo "Removing ArgoCD application..."
+
+    if ! argocd_application_crd_installed; then
+        echo "Skipping ArgoCD application removal because the Application CRD is not installed."
+        return 0
+    fi
+
     echo "Deleting tracked app-of-apps manifest ${APP_OF_APPS_MANIFEST_FILE}..."
-    kubectl delete -f "${APP_OF_APPS_MANIFEST_FILE}" --ignore-not-found=true
+    run_kubectl_with_retry delete -f "${APP_OF_APPS_MANIFEST_FILE}" --ignore-not-found=true
 
     echo "ArgoCD app removed from argocd"
 
@@ -1123,7 +1177,7 @@ uninstall_argocd() {
     write_argocd_kustomization "$TEMP_DIR"
 
     delete_argocd_applications 180
-    kubectl delete -k "$TEMP_DIR" --ignore-not-found=true
+    run_kubectl_with_retry delete -k "$TEMP_DIR" --ignore-not-found=true
     kubectl delete namespace argocd --ignore-not-found=true --wait=false
     wait_for_namespace_deletion argocd 180
 
