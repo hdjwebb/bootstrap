@@ -77,3 +77,6 @@
 - [x] Add a dedicated `minikube` rehearsal script that tears the cluster down, brings it back up, runs `local-test-plus`, and captures failure diagnostics.
 - [x] Document the Keychain fallback and the destructive rehearsal entrypoint so operators can rerun the exact reliability check.
 - [x] Run repeated destructive `minikube` rehearsals and fix any failures they expose.
+- [x] Reproduce the uninstall/reinstall path on a live `minikube` cluster instead of inferring reliability from install-only rehearsal.
+- [x] Add a regression test that fails unless `install-secret-store` waits for webhook CA bundle injection before creating webhook-validated custom resources.
+- [x] Block `install-secret-store` on cert-manager and external-secrets webhook CA bundle injection so immediate reinstall no longer fails with webhook trust errors.

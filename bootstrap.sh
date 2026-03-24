@@ -141,6 +141,31 @@ wait_for_namespace_deletion() {
     done
 }
 
+wait_for_webhook_ca_bundle() {
+    local resource_kind="$1"
+    local resource_name="$2"
+    local timeout="${3:-120}"
+    local elapsed=0
+    local ca_bundle=""
+
+    echo "Waiting for ${resource_kind} ${resource_name} CA bundle injection..."
+
+    while true; do
+        ca_bundle="$(kubectl get "${resource_kind}" "${resource_name}" -o jsonpath="{.webhooks[0].clientConfig.caBundle}" 2>/dev/null || true)"
+
+        if [ -n "${ca_bundle}" ]; then
+            return 0
+        fi
+
+        if [ "${elapsed}" -ge "${timeout}" ]; then
+            die "${resource_kind} ${resource_name} CA bundle was not injected within ${timeout}s."
+        fi
+
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+}
+
 delete_argocd_applications() {
     local timeout="${1:-180}"
     local elapsed=0
@@ -653,6 +678,9 @@ uninstall_external_secrets() {
 # create ClusterStore connection for aKeyless
 
 install_secret_clusterStore_external_secrets() {
+    wait_for_webhook_ca_bundle validatingwebhookconfiguration cert-manager-webhook 120
+    wait_for_webhook_ca_bundle validatingwebhookconfiguration secretstore-validate 120
+    wait_for_webhook_ca_bundle validatingwebhookconfiguration externalsecret-validate 120
 
     # Create a temporary directory for Kustomize files
     temp_dir

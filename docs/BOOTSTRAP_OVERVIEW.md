@@ -44,6 +44,12 @@ standard repeatability check for disposable local clusters. It tears down
 expected Argo applications to converge, and dumps application, ExternalSecret,
 and pod diagnostics if anything fails.
 
+Recent reinstall investigation also exposed that webhook-serving deployments can
+be `Available` before their admission CA bundles are injected. The bootstrap now
+waits for the cert-manager and external-secrets validating webhook CA bundles
+before it creates webhook-validated custom resources, which removes the
+reinstall race seen immediately after a destructive teardown.
+
 ## Current Hardening Work
 
 The script currently depends on ad-hoc sleeps, inline temp directories, and
