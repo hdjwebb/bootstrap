@@ -179,6 +179,19 @@ kubectl_error_is_retryable() {
     esac
 }
 
+kubectl_manifest_delete_error_is_ignorable() {
+    local output="$1"
+
+    case "${output}" in
+        *"unable to recognize "*|*"the server could not find the requested resource"*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 run_kubectl_with_retry() {
     local max_attempts="${BOOTSTRAP_KUBECTL_RETRY_ATTEMPTS:-5}"
     local retry_delay="${BOOTSTRAP_KUBECTL_RETRY_DELAY_SECONDS:-2}"
@@ -187,14 +200,17 @@ run_kubectl_with_retry() {
     local exit_code=0
 
     while true; do
-        if output="$(kubectl "$@" 2>&1)"; then
+        set +e
+        output="$(kubectl "$@" 2>&1)"
+        exit_code=$?
+        set -e
+
+        if [ "${exit_code}" -eq 0 ]; then
             if [ -n "${output}" ]; then
                 printf '%s\n' "${output}"
             fi
             return 0
         fi
-
-        exit_code=$?
 
         if ! kubectl_error_is_retryable "${output}" || [ "${attempt}" -ge "${max_attempts}" ]; then
             if [ -n "${output}" ]; then
@@ -207,6 +223,53 @@ run_kubectl_with_retry() {
         echo "Retrying kubectl $1 after transient transport failure (${attempt}/${max_attempts})..." >&2
         sleep "${retry_delay}"
         attempt=$((attempt + 1))
+    done
+}
+
+run_kubectl_delete_with_retry_or_ignore_missing_apis() {
+    local max_attempts="${BOOTSTRAP_KUBECTL_RETRY_ATTEMPTS:-5}"
+    local retry_delay="${BOOTSTRAP_KUBECTL_RETRY_DELAY_SECONDS:-2}"
+    local attempt=1
+    local saw_retryable_failure=0
+    local output=""
+    local exit_code=0
+
+    while true; do
+        set +e
+        output="$(kubectl delete "$@" 2>&1)"
+        exit_code=$?
+        set -e
+
+        if [ "${exit_code}" -eq 0 ]; then
+            if [ -n "${output}" ]; then
+                printf '%s\n' "${output}"
+            fi
+            return 0
+        fi
+
+        if [ "${saw_retryable_failure}" -eq 1 ] && kubectl_manifest_delete_error_is_ignorable "${output}"; then
+            if [ -n "${output}" ]; then
+                printf '%s\n' "${output}" >&2
+            fi
+            echo "Continuing after manifest delete reported missing APIs during teardown..." >&2
+            return 0
+        fi
+
+        if kubectl_error_is_retryable "${output}" && [ "${attempt}" -lt "${max_attempts}" ]; then
+            saw_retryable_failure=1
+            if [ -n "${output}" ]; then
+                printf '%s\n' "${output}" >&2
+            fi
+            echo "Retrying kubectl delete after transient transport failure (${attempt}/${max_attempts})..." >&2
+            sleep "${retry_delay}"
+            attempt=$((attempt + 1))
+            continue
+        fi
+
+        if [ -n "${output}" ]; then
+            printf '%s\n' "${output}" >&2
+        fi
+        return "${exit_code}"
     done
 }
 
@@ -619,7 +682,7 @@ uninstall_cert_manager() {
     echo "Uninstalling cert-manager..."
     
     # Delete all cert-manager resources
-    run_kubectl_with_retry delete -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.yaml --ignore-not-found=true
+    run_kubectl_delete_with_retry_or_ignore_missing_apis -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.yaml --ignore-not-found=true
 
     kubectl delete namespace cert-manager --ignore-not-found=true --wait=false
     wait_for_namespace_deletion cert-manager 180
@@ -714,7 +777,7 @@ EOF
 uninstall_external_secrets() {
     echo "Uninstalling external-secrets..."
 
-    run_kubectl_with_retry delete -f https://github.com/external-secrets/external-secrets/releases/download/v0.10.4/external-secrets.yaml --ignore-not-found=true
+    run_kubectl_delete_with_retry_or_ignore_missing_apis -f https://github.com/external-secrets/external-secrets/releases/download/v0.10.4/external-secrets.yaml --ignore-not-found=true
     kubectl delete namespace external-secrets --ignore-not-found=true --wait=false
     wait_for_namespace_deletion external-secrets 180
 
@@ -1177,7 +1240,7 @@ uninstall_argocd() {
     write_argocd_kustomization "$TEMP_DIR"
 
     delete_argocd_applications 180
-    run_kubectl_with_retry delete -k "$TEMP_DIR" --ignore-not-found=true
+    run_kubectl_delete_with_retry_or_ignore_missing_apis -k "$TEMP_DIR" --ignore-not-found=true
     kubectl delete namespace argocd --ignore-not-found=true --wait=false
     wait_for_namespace_deletion argocd 180
 
