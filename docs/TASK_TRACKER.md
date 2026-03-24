@@ -70,3 +70,10 @@
 - [x] Add regressions that fail unless bootstrap exposes a tracked `local-test-plus` profile.
 - [x] Add a disposable `local-test-plus` root manifest in the cluster repo for a wider minikube-safe child-app set.
 - [x] Document the difference between `local-test` and `local-test-plus` for operators.
+
+## 2026-03-24 Bootstrap Rehearsal Reliability
+
+- [x] Add a regression test that fails unless bootstrap can load Akeyless credentials from macOS Keychain when the shell variables are unset.
+- [x] Add a dedicated `minikube` rehearsal script that tears the cluster down, brings it back up, runs `local-test-plus`, and captures failure diagnostics.
+- [x] Document the Keychain fallback and the destructive rehearsal entrypoint so operators can rerun the exact reliability check.
+- [ ] Run repeated destructive `minikube` rehearsals and fix any failures they expose.

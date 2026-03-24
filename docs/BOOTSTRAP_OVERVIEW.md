@@ -32,6 +32,18 @@ cluster repo and applies that file directly instead of rendering inline YAML.
 The bootstrap repo resolves the cluster repo checkout relative to the workspace
 by default and exposes `BOOTSTRAP_CLUSTER_REPO_ROOT` when that layout differs.
 
+On macOS, the bootstrap can now source the Akeyless API key from Keychain when
+`AKEYLESS_ACCESS_ID` and `AKEYLESS_ACCESS_SECRET_KEY` are not already exported.
+That keeps local rehearsal usable without pushing long-lived secrets into shell
+startup files.
+
+The repo also now carries a destructive rehearsal script,
+`scripts/rehearse-minikube-local-test-plus.sh`, which is intended to be the
+standard repeatability check for disposable local clusters. It tears down
+`minikube`, starts a fresh cluster, runs `local-test-plus`, waits for the
+expected Argo applications to converge, and dumps application, ExternalSecret,
+and pod diagnostics if anything fails.
+
 ## Current Hardening Work
 
 The script currently depends on ad-hoc sleeps, inline temp directories, and
@@ -44,3 +56,5 @@ manual toggling inside `main()`. The hardening work for this task is aimed at:
 - clearer operator-facing workflow and docs
 - profile-driven cluster settings instead of hard-coded environment values
 - tracked bootstrap manifests instead of imperative inline app-of-apps rendering
+- destructive rehearsal coverage that exercises full teardown and bring-up on a
+  disposable cluster instead of relying only on static shell tests

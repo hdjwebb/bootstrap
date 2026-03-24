@@ -27,6 +27,9 @@ APP_OF_APPS_MANIFEST_PATH=""
 APP_OF_APPS_MANIFEST_FILE=""
 ARGOCD_HOSTNAME_PREFIX="${BOOTSTRAP_ARGOCD_HOSTNAME_PREFIX:-argocd}"
 ARGOCD_PORT_FORWARD_PORT="${BOOTSTRAP_ARGOCD_PORT_FORWARD_PORT:-8080}"
+BOOTSTRAP_AKEYLESS_KEYCHAIN_ACCOUNT="${BOOTSTRAP_AKEYLESS_KEYCHAIN_ACCOUNT:-${USER:-}}"
+BOOTSTRAP_AKEYLESS_KEYCHAIN_ACCESS_ID_SERVICE="${BOOTSTRAP_AKEYLESS_KEYCHAIN_ACCESS_ID_SERVICE:-akeyless-access-id}"
+BOOTSTRAP_AKEYLESS_KEYCHAIN_ACCESS_KEY_SERVICE="${BOOTSTRAP_AKEYLESS_KEYCHAIN_ACCESS_KEY_SERVICE:-akeyless-access-key}"
 
 die() {
     echo "❌   Error: $*" >&2
@@ -407,7 +410,14 @@ EOF
 
 validate_variables() {
     local missing_variables=0
-    
+    local loaded_from_keychain=0
+
+    if [ -z "${AKEYLESS_ACCESS_ID:-}" ] || [ -z "${AKEYLESS_ACCESS_SECRET_KEY:-}" ]; then
+        if load_akeyless_variables_from_keychain; then
+            loaded_from_keychain=1
+        fi
+    fi
+
     if [ -z "${AKEYLESS_ACCESS_ID:-}" ]; then
         echo "❌   Error: AKEYLESS_ACCESS_ID is not set!"
         missing_variables=1
@@ -423,8 +433,57 @@ validate_variables() {
         exit 1
     fi
 
+    if [ "${loaded_from_keychain}" -eq 1 ]; then
+        echo "✅ Loaded Akeyless credentials from macOS Keychain."
+    fi
+
     echo "✅ All required variables are set."
     emptyline
+}
+
+load_akeyless_variables_from_keychain() {
+    local os_name
+    local loaded=1
+
+    os_name="$(uname -s 2>/dev/null || true)"
+
+    if [ "${os_name}" != "Darwin" ]; then
+        return 1
+    fi
+
+    if ! command -v security >/dev/null 2>&1; then
+        return 1
+    fi
+
+    if [ -z "${BOOTSTRAP_AKEYLESS_KEYCHAIN_ACCOUNT}" ]; then
+        return 1
+    fi
+
+    if [ -z "${AKEYLESS_ACCESS_ID:-}" ]; then
+        AKEYLESS_ACCESS_ID="$(
+            security find-generic-password \
+                -a "${BOOTSTRAP_AKEYLESS_KEYCHAIN_ACCOUNT}" \
+                -s "${BOOTSTRAP_AKEYLESS_KEYCHAIN_ACCESS_ID_SERVICE}" \
+                -w 2>/dev/null || true
+        )"
+        export AKEYLESS_ACCESS_ID
+    fi
+
+    if [ -z "${AKEYLESS_ACCESS_SECRET_KEY:-}" ]; then
+        AKEYLESS_ACCESS_SECRET_KEY="$(
+            security find-generic-password \
+                -a "${BOOTSTRAP_AKEYLESS_KEYCHAIN_ACCOUNT}" \
+                -s "${BOOTSTRAP_AKEYLESS_KEYCHAIN_ACCESS_KEY_SERVICE}" \
+                -w 2>/dev/null || true
+        )"
+        export AKEYLESS_ACCESS_SECRET_KEY
+    fi
+
+    if [ -z "${AKEYLESS_ACCESS_ID:-}" ] || [ -z "${AKEYLESS_ACCESS_SECRET_KEY:-}" ]; then
+        loaded=0
+    fi
+
+    [ "${loaded}" -eq 1 ]
 }
 
 
@@ -1109,6 +1168,9 @@ Environment overrides:
   BOOTSTRAP_HELM_REGISTRY_URL
   BOOTSTRAP_ARGOCD_HOSTNAME_PREFIX
   BOOTSTRAP_ARGOCD_PORT_FORWARD_PORT
+  BOOTSTRAP_AKEYLESS_KEYCHAIN_ACCOUNT
+  BOOTSTRAP_AKEYLESS_KEYCHAIN_ACCESS_ID_SERVICE
+  BOOTSTRAP_AKEYLESS_KEYCHAIN_ACCESS_KEY_SERVICE
 EOF
 }
 

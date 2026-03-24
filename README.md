@@ -30,6 +30,7 @@ Run the script with one or more explicit actions:
 ./bootstrap.sh --profile microk8s-lab full-install
 ./bootstrap.sh --profile local-test full-install
 ./bootstrap.sh --profile local-test-plus full-install
+./scripts/rehearse-minikube-local-test-plus.sh
 ```
 
 Available actions:
@@ -115,6 +116,19 @@ the cluster-specific values:
 - `AKEYLESS_ACCESS_ID`
 - `AKEYLESS_ACCESS_SECRET_KEY`
 
+On macOS, the script can load those automatically from Keychain when the shell
+variables are unset. By default it looks for:
+
+- account: `${USER}`
+- service: `akeyless-access-id`
+- service: `akeyless-access-key`
+
+You can override that lookup with:
+
+- `BOOTSTRAP_AKEYLESS_KEYCHAIN_ACCOUNT`
+- `BOOTSTRAP_AKEYLESS_KEYCHAIN_ACCESS_ID_SERVICE`
+- `BOOTSTRAP_AKEYLESS_KEYCHAIN_ACCESS_KEY_SERVICE`
+
 The script also expects `kubectl` to be configured for the target cluster.
 
 `add-app-of-apps` also expects a local checkout of the cluster repo. By default
@@ -148,3 +162,8 @@ relative to the bootstrap repo, and you can override it with
   force-delete fallbacks
 - Argo CD uninstall now deletes `Application` resources and clears stuck Argo
   finalizers before removing the control plane
+- `scripts/rehearse-minikube-local-test-plus.sh` now gives the repo a single
+  destructive rehearsal entrypoint that tears down `minikube`, boots a fresh
+  cluster, runs `local-test-plus`, waits for the expected Argo apps to become
+  `Synced/Healthy`, and dumps pod/application/ExternalSecret diagnostics if a
+  cycle fails
