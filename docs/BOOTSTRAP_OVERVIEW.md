@@ -78,6 +78,12 @@ retries manifest-based `kubectl apply/delete` operations when they fail with
 transport errors such as `connection refused` or `unexpected EOF`, instead of
 aborting the whole run on the first disconnect.
 
+The latest teardown replay also exposed operator-managed namespaces that could
+enter `Terminating` and stay there because custom resources or controllers kept
+their own finalizers. Namespace-deletion waits now enumerate the remaining
+namespaced objects and clear `metadata.finalizers`, which is the path that
+unblocks disposable operator namespaces like `alloy` during `full-uninstall`.
+
 ## Current Hardening Work
 
 The script currently depends on ad-hoc sleeps, inline temp directories, and

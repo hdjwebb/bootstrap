@@ -186,8 +186,33 @@ secret_is_present() {
 
 namespace_is_deleted() {
     local namespace="$1"
+    local deletion_timestamp=""
 
-    ! kubectl get namespace "${namespace}" >/dev/null 2>&1
+    if ! kubectl get namespace "${namespace}" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    deletion_timestamp="$(kubectl get namespace "${namespace}" -o jsonpath="{.metadata.deletionTimestamp}" 2>/dev/null || true)"
+    if [ -n "${deletion_timestamp}" ]; then
+        clear_namespace_resource_finalizers "${namespace}"
+    fi
+
+    return 1
+}
+
+clear_namespace_resource_finalizers() {
+    local namespace="$1"
+    local resource_type=""
+    local resource_name=""
+
+    while read -r resource_type; do
+        [ -n "${resource_type}" ] || continue
+
+        while read -r resource_name; do
+            [ -n "${resource_name}" ] || continue
+            kubectl patch "${resource_name}" -n "${namespace}" --type=merge -p '{"metadata":{"finalizers":[]}}' >/dev/null 2>&1 || true
+        done < <(kubectl get -n "${namespace}" "${resource_type}" -o name --ignore-not-found 2>/dev/null || true)
+    done < <(kubectl api-resources --verbs=list --namespaced -o name 2>/dev/null || true)
 }
 
 webhook_ca_bundle_injected() {

@@ -110,3 +110,9 @@
 - [x] Add a regression that proves the destructive minikube rehearsal refuses to start when another run already holds the lock.
 - [x] Centralize bootstrap polling on a shared heartbeat helper so long waits surface elapsed time and the resource being waited on.
 - [x] Guard the destructive minikube rehearsal with an exclusive per-profile lock so concurrent runs fail fast instead of corrupting validation.
+
+## 2026-03-28 Namespace Finalizer Cleanup
+
+- [x] Reproduce a live `full-uninstall` hang caused by operator-managed resources remaining in a terminating namespace.
+- [x] Add a regression that proves terminating-namespace waits enumerate remaining namespaced resources and clear their finalizers.
+- [x] Scrub lingering workload finalizers during namespace-deletion waits so disposable operator namespaces like `alloy` do not block teardown forever.

@@ -175,6 +175,9 @@ relative to the bootstrap repo, and you can override it with
   force-delete fallbacks
 - Argo CD uninstall now deletes `Application` resources and clears stuck Argo
   finalizers before removing the control plane
+- namespace deletion waits now scrub lingering workload finalizers inside
+  terminating namespaces, which keeps disposable operator namespaces like
+  `alloy` from hanging `full-uninstall`
 - `full-uninstall` now safely skips root app deletion when the Argo CD
   `Application` CRD is not installed, which matters for partial or failed local
   reinstalls
