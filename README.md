@@ -183,7 +183,9 @@ relative to the bootstrap repo, and you can override it with
   showed up during live cert-manager uninstall/reinstall testing on `minikube`
 - `scripts/rehearse-minikube-local-test-plus.sh` now gives the repo a single
   destructive rehearsal entrypoint that tears down `minikube`, boots a fresh
-  cluster, runs `local-test-plus`, verifies the expected Argo apps become
-  `Synced/Healthy`, runs `full-uninstall`, verifies the managed namespaces and
-  key CRDs are gone, then immediately reinstalls and verifies the stack again;
-  if any phase fails it dumps pod/application/ExternalSecret diagnostics
+  cluster, runs `local-test-plus`, verifies the full disposable Argo app set
+  (`alloy`, `app-of-apps`, `argocd`, `cert-manager`, `cnpg`, `envoy`,
+  `metallb`, `metrics-server`, and `monitoring`) becomes `Synced/Healthy`,
+  runs `full-uninstall`, verifies the managed namespaces and key CRDs are gone,
+  then immediately reinstalls and verifies the stack again; if any phase fails
+  it dumps pod/application/ExternalSecret diagnostics

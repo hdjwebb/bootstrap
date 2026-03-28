@@ -77,6 +77,7 @@
 - [x] Add a dedicated `minikube` rehearsal script that tears the cluster down, brings it back up, runs `local-test-plus`, and captures failure diagnostics.
 - [x] Document the Keychain fallback and the destructive rehearsal entrypoint so operators can rerun the exact reliability check.
 - [x] Run repeated destructive `minikube` rehearsals and fix any failures they expose.
+- [x] Tighten the destructive rehearsal so it verifies the full `local-test-plus` disposable app set, not just the original bootstrap-core subset.
 
 ## 2026-03-24 Uninstall/Reinstall Reliability
 

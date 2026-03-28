@@ -89,14 +89,30 @@ wait_for_expected_apps() {
   local timeout=300
   local elapsed=0
   local apps_output=""
+  local expected_patterns=(
+    '^alloy[[:space:]]+Synced[[:space:]]+Healthy$'
+    '^app-of-apps[[:space:]]+Synced[[:space:]]+Healthy$'
+    '^argocd[[:space:]]+Synced[[:space:]]+Healthy$'
+    '^cert-manager[[:space:]]+Synced[[:space:]]+Healthy$'
+    '^cnpg[[:space:]]+Synced[[:space:]]+Healthy$'
+    '^envoy[[:space:]]+Synced[[:space:]]+Healthy$'
+    '^metallb[[:space:]]+Synced[[:space:]]+Healthy$'
+    '^metrics-server[[:space:]]+Synced[[:space:]]+Healthy$'
+    '^monitoring[[:space:]]+Synced[[:space:]]+Healthy$'
+  )
+  local pattern
 
   while true; do
     apps_output="$(kubectl -n argocd get applications 2>/dev/null || true)"
 
-    if printf '%s\n' "${apps_output}" | rg -q '^app-of-apps[[:space:]]+Synced[[:space:]]+Healthy$' &&
-       printf '%s\n' "${apps_output}" | rg -q '^argocd[[:space:]]+Synced[[:space:]]+Healthy$' &&
-       printf '%s\n' "${apps_output}" | rg -q '^cert-manager[[:space:]]+Synced[[:space:]]+Healthy$' &&
-       printf '%s\n' "${apps_output}" | rg -q '^metrics-server[[:space:]]+Synced[[:space:]]+Healthy$'; then
+    for pattern in "${expected_patterns[@]}"; do
+      if ! printf '%s\n' "${apps_output}" | rg -q "${pattern}"; then
+        pattern=""
+        break
+      fi
+    done
+
+    if [ -n "${pattern:-}" ]; then
       printf '%s\n' "${apps_output}"
       return 0
     fi
