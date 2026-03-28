@@ -46,6 +46,12 @@ verifies the managed namespaces and key CRDs are gone, and immediately runs the
 reinstall on the same cluster. If anything fails it dumps application,
 ExternalSecret, and pod diagnostics.
 
+That rehearsal script now emits step-by-step progress and heartbeat messages
+during long waits, and it refuses to start if another rehearsal is already
+holding the same profile lock. That keeps overlapping destructive runs from
+fighting each other while still making it obvious which resource is slowing the
+cycle down.
+
 Recent reinstall investigation also exposed that webhook-serving deployments can
 be `Available` before their admission CA bundles are injected. The bootstrap now
 waits for the cert-manager and external-secrets validating webhook CA bundles

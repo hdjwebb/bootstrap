@@ -79,6 +79,13 @@
 - [x] Run repeated destructive `minikube` rehearsals and fix any failures they expose.
 - [x] Tighten the destructive rehearsal so it verifies the full `local-test-plus` disposable app set, not just the original bootstrap-core subset.
 
+## 2026-03-28 Bootstrap Operability Feedback
+
+- [x] Add regression coverage for heartbeat output during long bootstrap waits.
+- [x] Add regression coverage for rehearsal-script progress output and single-run locking.
+- [x] Teach the bootstrap and rehearsal wait loops to emit periodic heartbeats with elapsed time, timeout budget, and the resource being waited on.
+- [x] Prevent overlapping `local-test-plus` rehearsal runs from sharing the same destructive `minikube` cluster.
+
 ## 2026-03-24 Uninstall/Reinstall Reliability
 
 - [x] Reproduce a live `full-uninstall` -> `full-install` failure on `minikube`.
@@ -95,3 +102,10 @@
 - [x] Retry retryable `kubectl apply/delete` transport failures so teardown does not abort on a short-lived apiserver disconnect or EOF.
 - [x] Fix the shared kubectl retry helper so non-retryable errors still fail instead of being masked by the shell `if` exit-status edge case.
 - [x] Tolerate missing-API discovery errors on replayed uninstall manifest deletes after a retryable partial teardown removes the relevant CRDs first.
+
+## 2026-03-28 Operator Feedback Hardening
+
+- [x] Add a regression that proves the shared bootstrap wait helper emits heartbeat output while polling.
+- [x] Add a regression that proves the destructive minikube rehearsal refuses to start when another run already holds the lock.
+- [x] Centralize bootstrap polling on a shared heartbeat helper so long waits surface elapsed time and the resource being waited on.
+- [x] Guard the destructive minikube rehearsal with an exclusive per-profile lock so concurrent runs fail fast instead of corrupting validation.

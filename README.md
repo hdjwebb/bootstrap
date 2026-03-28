@@ -181,6 +181,8 @@ relative to the bootstrap repo, and you can override it with
 - manifest-based `kubectl apply/delete` operations now retry transient
   transport failures such as `connection refused` and `unexpected EOF`, which
   showed up during live cert-manager uninstall/reinstall testing on `minikube`
+- long polling waits now emit heartbeat logs with elapsed time and the resource
+  being waited on, so operators can distinguish a slow cluster from a hung run
 - `scripts/rehearse-minikube-local-test-plus.sh` now gives the repo a single
   destructive rehearsal entrypoint that tears down `minikube`, boots a fresh
   cluster, runs `local-test-plus`, verifies the full disposable Argo app set
@@ -189,3 +191,10 @@ relative to the bootstrap repo, and you can override it with
   runs `full-uninstall`, verifies the managed namespaces and key CRDs are gone,
   then immediately reinstalls and verifies the stack again; if any phase fails
   it dumps pod/application/ExternalSecret diagnostics
+- the rehearsal script now takes an exclusive lock per minikube profile so two
+  destructive runs cannot overlap and invalidate the result
+- the bootstrap and rehearsal wait loops now emit periodic heartbeats so long
+  waits show elapsed time, timeout budget, and the resource they are waiting on
+- the destructive rehearsal script now takes a single-run lock, so a second
+  overlapping `local-test-plus` rehearsal fails fast instead of clobbering the
+  same `minikube` cluster

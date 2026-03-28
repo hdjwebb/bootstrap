@@ -36,6 +36,47 @@ die() {
     exit 1
 }
 
+log_step() {
+    echo "==> $*"
+}
+
+log_wait_heartbeat() {
+    local description="$1"
+    local elapsed="$2"
+    local timeout="$3"
+    local resource_hint="${4:-}"
+
+    if [ -n "${resource_hint}" ]; then
+        echo "⏳   ${description} still waiting (${elapsed}s/${timeout}s): ${resource_hint}" >&2
+    else
+        echo "⏳   ${description} still waiting (${elapsed}s/${timeout}s)" >&2
+    fi
+}
+
+wait_for_predicate_with_heartbeat() {
+    local description="$1"
+    local timeout="${2:-120}"
+    local interval="${3:-5}"
+    local resource_hint="${4:-}"
+    local elapsed=0
+
+    shift 4
+
+    while true; do
+        if "$@"; then
+            return 0
+        fi
+
+        if [ "${elapsed}" -ge "${timeout}" ]; then
+            die "${description} did not become ready within ${timeout}s."
+        fi
+
+        log_wait_heartbeat "${description}" "${elapsed}" "${timeout}" "${resource_hint}"
+        sleep "${interval}"
+        elapsed=$((elapsed + interval))
+    done
+}
+
 cleanup_temp_dirs() {
     local temp_dir
 
@@ -84,86 +125,78 @@ wait_for_secret() {
     local namespace="$1"
     local name="$2"
     local timeout="${3:-120}"
-    local elapsed=0
-
-    echo "Waiting for secret ${name} in namespace ${namespace}..."
-
-    while ! kubectl get secret "${name}" -n "${namespace}" >/dev/null 2>&1; do
-        if [ "${elapsed}" -ge "${timeout}" ]; then
-            echo "❌   Error: secret ${name} in namespace ${namespace} did not become available within ${timeout}s."
-            exit 1
-        fi
-
-        sleep 2
-        elapsed=$((elapsed + 2))
-    done
+    wait_for_predicate_with_heartbeat \
+        "secret ${name} in namespace ${namespace}" \
+        "${timeout}" \
+        5 \
+        "namespace=${namespace} resource=secret/${name}" \
+        secret_is_present "${namespace}" "${name}"
 }
 
 wait_for_externalsecret_ready() {
     local namespace="$1"
     local name="$2"
     local timeout="${3:-120}"
-    local elapsed=0
-    local ready_status=""
-
-    echo "Waiting for ExternalSecret ${name} in namespace ${namespace}..."
-
-    while true; do
-        ready_status="$(kubectl get externalsecret "${name}" -n "${namespace}" -o jsonpath="{.status.conditions[?(@.type==\"Ready\")].status}" 2>/dev/null || true)"
-
-        if [ "${ready_status}" = "True" ]; then
-            return 0
-        fi
-
-        if [ "${elapsed}" -ge "${timeout}" ]; then
-            die "ExternalSecret ${name} in namespace ${namespace} did not become ready within ${timeout}s."
-        fi
-
-        sleep 2
-        elapsed=$((elapsed + 2))
-    done
+    wait_for_predicate_with_heartbeat \
+        "ExternalSecret ${name} in namespace ${namespace}" \
+        "${timeout}" \
+        5 \
+        "namespace=${namespace} resource=externalsecret/${name}" \
+        externalsecret_is_ready "${namespace}" "${name}"
 }
 
 wait_for_namespace_deletion() {
     local namespace="$1"
     local timeout="${2:-180}"
-    local elapsed=0
-
-    echo "Waiting for namespace ${namespace} to be deleted..."
-
-    while kubectl get namespace "${namespace}" >/dev/null 2>&1; do
-        if [ "${elapsed}" -ge "${timeout}" ]; then
-            die "namespace ${namespace} was not deleted within ${timeout}s."
-        fi
-
-        sleep 2
-        elapsed=$((elapsed + 2))
-    done
+    wait_for_predicate_with_heartbeat \
+        "namespace ${namespace} to be deleted" \
+        "${timeout}" \
+        5 \
+        "namespace=${namespace}" \
+        namespace_is_deleted "${namespace}"
 }
 
 wait_for_webhook_ca_bundle() {
     local resource_kind="$1"
     local resource_name="$2"
     local timeout="${3:-120}"
-    local elapsed=0
+    wait_for_predicate_with_heartbeat \
+        "${resource_kind} ${resource_name} CA bundle injection" \
+        "${timeout}" \
+        5 \
+        "resource=${resource_kind}/${resource_name}" \
+        webhook_ca_bundle_injected "${resource_kind}" "${resource_name}"
+}
+
+externalsecret_is_ready() {
+    local namespace="$1"
+    local name="$2"
+    local ready_status=""
+
+    ready_status="$(kubectl get externalsecret "${name}" -n "${namespace}" -o jsonpath="{.status.conditions[?(@.type==\"Ready\")].status}" 2>/dev/null || true)"
+    [ "${ready_status}" = "True" ]
+}
+
+secret_is_present() {
+    local namespace="$1"
+    local name="$2"
+
+    kubectl get secret "${name}" -n "${namespace}" >/dev/null 2>&1
+}
+
+namespace_is_deleted() {
+    local namespace="$1"
+
+    ! kubectl get namespace "${namespace}" >/dev/null 2>&1
+}
+
+webhook_ca_bundle_injected() {
+    local resource_kind="$1"
+    local resource_name="$2"
     local ca_bundle=""
 
-    echo "Waiting for ${resource_kind} ${resource_name} CA bundle injection..."
-
-    while true; do
-        ca_bundle="$(kubectl get "${resource_kind}" "${resource_name}" -o jsonpath="{.webhooks[0].clientConfig.caBundle}" 2>/dev/null || true)"
-
-        if [ -n "${ca_bundle}" ]; then
-            return 0
-        fi
-
-        if [ "${elapsed}" -ge "${timeout}" ]; then
-            die "${resource_kind} ${resource_name} CA bundle was not injected within ${timeout}s."
-        fi
-
-        sleep 2
-        elapsed=$((elapsed + 2))
-    done
+    ca_bundle="$(kubectl get "${resource_kind}" "${resource_name}" -o jsonpath="{.webhooks[0].clientConfig.caBundle}" 2>/dev/null || true)"
+    [ -n "${ca_bundle}" ]
 }
 
 kubectl_error_is_retryable() {
@@ -274,36 +307,35 @@ run_kubectl_delete_with_retry_or_ignore_missing_apis() {
 }
 
 delete_argocd_applications() {
-    local timeout="${1:-180}"
-    local elapsed=0
-    local remaining_apps=""
-    local app=""
-
     if ! kubectl get namespace argocd >/dev/null 2>&1; then
         return 0
     fi
 
     echo "Deleting Argo CD Application resources before uninstalling Argo CD..."
     kubectl delete applications.argoproj.io --all -n argocd --ignore-not-found=true --wait=false
+    wait_for_predicate_with_heartbeat \
+        "Argo CD Application resources to be deleted" \
+        "${1:-180}" \
+        5 \
+        "namespace=argocd resource=applications.argoproj.io" \
+        argocd_applications_deleted
+}
 
-    while true; do
-        remaining_apps="$(kubectl get applications.argoproj.io -n argocd -o name 2>/dev/null || true)"
+argocd_applications_deleted() {
+    local remaining_apps=""
+    local app=""
 
-        if [ -z "${remaining_apps}" ]; then
-            return 0
-        fi
+    remaining_apps="$(kubectl get applications.argoproj.io -n argocd -o name 2>/dev/null || true)"
 
-        for app in ${remaining_apps}; do
-            kubectl patch "${app}" -n argocd --type=merge -p '{"metadata":{"finalizers":[]}}' >/dev/null 2>&1 || true
-        done
+    if [ -z "${remaining_apps}" ]; then
+        return 0
+    fi
 
-        if [ "${elapsed}" -ge "${timeout}" ]; then
-            die "Argo CD Application resources were not deleted within ${timeout}s."
-        fi
-
-        sleep 2
-        elapsed=$((elapsed + 2))
+    for app in ${remaining_apps}; do
+        kubectl patch "${app}" -n argocd --type=merge -p '{"metadata":{"finalizers":[]}}' >/dev/null 2>&1 || true
     done
+
+    return 1
 }
 
 
@@ -626,13 +658,42 @@ load_akeyless_variables_from_keychain() {
 # Function to wait for a deployment to be ready
 
 wait_for_deployment() {
-    echo "Waiting for deployment $1 in namespace $2 to be ready..."
-    kubectl wait --for=condition=available --timeout=300s "deployment/$1" -n "$2"
+    wait_for_predicate_with_heartbeat \
+        "deployment $1 in namespace $2 to be ready" \
+        300 \
+        5 \
+        "namespace=$2 deployment/$1" \
+        deployment_is_available "$1" "$2"
 }
 
 wait_for_daemonset_rollout() {
-    echo "Waiting for daemonset $1 in namespace $2 to roll out..."
-    kubectl rollout status "daemonset/$1" -n "$2" --timeout=300s
+    wait_for_predicate_with_heartbeat \
+        "daemonset $1 in namespace $2 to roll out" \
+        300 \
+        5 \
+        "namespace=$2 daemonset/$1" \
+        daemonset_is_ready "$1" "$2"
+}
+
+deployment_is_available() {
+    local name="$1"
+    local namespace="$2"
+    local available_status=""
+
+    available_status="$(kubectl get deployment "${name}" -n "${namespace}" -o jsonpath="{.status.conditions[?(@.type==\"Available\")].status}" 2>/dev/null || true)"
+    [ "${available_status}" = "True" ]
+}
+
+daemonset_is_ready() {
+    local name="$1"
+    local namespace="$2"
+    local desired=""
+    local ready=""
+
+    desired="$(kubectl get daemonset "${name}" -n "${namespace}" -o jsonpath="{.status.desiredNumberScheduled}" 2>/dev/null || true)"
+    ready="$(kubectl get daemonset "${name}" -n "${namespace}" -o jsonpath="{.status.numberReady}" 2>/dev/null || true)"
+
+    [ -n "${desired}" ] && [ "${desired}" = "${ready}" ]
 }
 
 
