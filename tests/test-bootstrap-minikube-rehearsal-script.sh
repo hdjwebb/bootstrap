@@ -36,10 +36,14 @@ assert_contains 'kubectl -n argocd describe applications' "rehearsal script shou
 assert_contains 'kubectl get externalsecret -A' "rehearsal script should dump ExternalSecret state on failure"
 assert_contains 'kubectl describe pod' "rehearsal script should dump pod descriptions on failure"
 assert_contains 'kubectl logs' "rehearsal script should dump logs on failure"
-
 install_count="$(rg -c -- '--profile local-test-plus full-install' "${SCRIPT}")"
 if [ "${install_count}" -lt 2 ]; then
   echo "FAIL: rehearsal script should perform an install, uninstall, and reinstall sequence on the same cluster"
+  exit 1
+fi
+
+if ! grep -Fq "kubectl get pods -A --no-headers | awk '\$4 != \"Running\" || \$3 !~ /^[0-9]+\/[0-9]+$/ || \$2 == \"\" {print \$0}'" "${SCRIPT}"; then
+  echo "FAIL: rehearsal script should use a single-slash awk regex for pod readiness filtering"
   exit 1
 fi
 

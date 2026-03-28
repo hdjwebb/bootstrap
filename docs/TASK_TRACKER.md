@@ -78,6 +78,7 @@
 - [x] Document the Keychain fallback and the destructive rehearsal entrypoint so operators can rerun the exact reliability check.
 - [x] Run repeated destructive `minikube` rehearsals and fix any failures they expose.
 - [x] Tighten the destructive rehearsal so it verifies the full `local-test-plus` disposable app set, not just the original bootstrap-core subset.
+- [x] Fix the destructive rehearsal failure-dump pod filter so failure diagnostics do not crash on an `awk` regex escaping bug.
 
 ## 2026-03-28 Bootstrap Operability Feedback
 

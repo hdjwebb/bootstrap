@@ -171,7 +171,7 @@ dump_failure_state() {
 
     echo "--- logs ${namespace}/${pod_name} ---"
     kubectl logs "${pod_name}" -n "${namespace}" --all-containers --tail=200 || true
-  done < <(kubectl get pods -A --no-headers | awk '$4 != "Running" || $3 !~ /^[0-9]+\\/[0-9]+$/ || $2 == "" {print $0}')
+  done < <(kubectl get pods -A --no-headers | awk '$4 != "Running" || $3 !~ /^[0-9]+\/[0-9]+$/ || $2 == "" {print $0}')
 }
 
 wait_for_expected_apps() {
