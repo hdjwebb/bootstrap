@@ -38,7 +38,7 @@ BOOTSTRAP_TEST_LOG_FILE="${LOG_FILE}" PATH="${WORKDIR}:${PATH}" bash -c '
 ' -- "${SCRIPT}"
 
 create_line="$(grep -n '^create namespace argocd$' "${LOG_FILE}" | head -n1 | cut -d: -f1 || true)"
-apply_line="$(grep -n '^apply -k ' "${LOG_FILE}" | head -n1 | cut -d: -f1 || true)"
+apply_line="$(grep -n '^apply --server-side -k ' "${LOG_FILE}" | head -n1 | cut -d: -f1 || true)"
 
 if [ -z "${create_line}" ]; then
   echo "FAIL: install_argocd should create the argocd namespace when it does not exist"
@@ -46,7 +46,7 @@ if [ -z "${create_line}" ]; then
 fi
 
 if [ -z "${apply_line}" ]; then
-  echo "FAIL: install_argocd should apply the Argo CD kustomization"
+  echo "FAIL: install_argocd should server-side apply the Argo CD kustomization"
   exit 1
 fi
 

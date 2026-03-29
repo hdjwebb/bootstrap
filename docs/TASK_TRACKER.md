@@ -136,3 +136,4 @@
 - [ ] Upgrade the remaining GitOps-managed components in atomic slices and prove each slice independently.
 - [x] Upgrade bootstrap-managed direct manifest pins for Argo CD, cert-manager, Envoy Gateway, and MetalLB.
 - [x] Upgrade the bootstrap External Secrets installer to `v2.2.0` and migrate generated manifests from `external-secrets.io/v1beta1` to `v1`.
+- [x] Switch the bootstrap Argo CD installer to server-side apply so the `v3.3.6` CRDs no longer trip the annotation size limit on fresh clusters.

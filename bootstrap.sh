@@ -1150,7 +1150,7 @@ install_argocd() {
 
 
     # Install ArgoCD using kustomize
-    run_kubectl_with_retry apply -k "$TEMP_DIR"
+    run_kubectl_with_retry apply --server-side -k "$TEMP_DIR"
 
     # Clean up the temporary directory
     rm -rf "$TEMP_DIR"
