@@ -156,6 +156,11 @@ if ! rg -q '^delete application\.argoproj\.io/alloy -n argocd --ignore-not-found
   exit 1
 fi
 
+if rg -q '^delete application\.argoproj\.io/argocd -n argocd --ignore-not-found=true --wait=false$' "${LOG_FILE}"; then
+  echo "FAIL: remove_argocd_app should not delete the self-hosted argocd child application before control-plane uninstall"
+  exit 1
+fi
+
 if rg -q '^patch application\.argoproj\.io/(alloy|argocd) -n argocd --type=merge -p \{"metadata":\{"finalizers":\[\]\}\}$' "${LOG_FILE}"; then
   echo "FAIL: remove_argocd_app should not clear child application finalizers during the normal prune path"
   exit 1

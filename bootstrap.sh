@@ -418,7 +418,7 @@ argocd_child_applications_deleted() {
 list_argocd_child_applications() {
     kubectl get applications.argoproj.io -n argocd \
         -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.metadata.annotations.argocd\.argoproj\.io/tracking-id}{"\n"}{end}' 2>/dev/null \
-        | awk -F'|' '$2 ~ /^app-of-apps:/ {print "application.argoproj.io/" $1}'
+        | awk -F'|' '$2 ~ /^app-of-apps:/ && $1 != "argocd" {print "application.argoproj.io/" $1}'
 }
 
 clear_terminating_profile_namespace_finalizers() {

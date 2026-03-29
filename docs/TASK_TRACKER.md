@@ -123,11 +123,13 @@ Notes:
 - [x] Add a regression that fails if `remove_argocd_app` clears child application finalizers during the normal prune path.
 - [x] Preserve child application finalizers during the normal prune wait so Argo can actually delete managed resources before the namespace checks run.
 - [x] Break the prune deadlock by clearing workload finalizers inside terminating profile namespaces while child applications are still deleting.
+- [x] Keep the self-hosted `argocd` child application out of `remove_argocd_app` so the control plane is only torn down by `uninstall_argocd`.
 
 Notes:
 - The previous `remove_argocd_app` flow patched away child `Application` finalizers while waiting for them to disappear. That made the application objects vanish quickly, but it also bypassed Argo's resource-pruning behavior and left namespaces like `cnpg` populated.
 - The normal teardown path now waits for child applications to prune naturally and only relies on namespace resource finalizer cleanup once a namespace is actually terminating.
 - Some apps, especially `alloy`, can keep their `Application` finalizer until the namespace teardown finishes. The child-app wait loop now sweeps terminating profile namespaces too, so workload finalizers get cleared early enough for Argo to finish deleting the child app.
+- Deleting the self-hosted `argocd` child app too early can put the `argocd` namespace into `Terminating` while the rest of the child applications are still deleting. The root-app removal path now skips that child app and lets the dedicated `uninstall_argocd` step own the control-plane teardown.
 
 ## 2026-03-24 Uninstall/Reinstall Reliability
 
