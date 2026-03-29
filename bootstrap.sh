@@ -25,6 +25,7 @@ HELM_REGISTRY_URL=""
 CLUSTER_REPO_ROOT="${BOOTSTRAP_CLUSTER_REPO_ROOT:-${WORKSPACE_ROOT}/GitLab/ifpossible-sre/Clusters/microK8s}"
 APP_OF_APPS_MANIFEST_PATH=""
 APP_OF_APPS_MANIFEST_FILE=""
+PROFILE_APP_NAMESPACES="${BOOTSTRAP_PROFILE_APP_NAMESPACES:-}"
 ARGOCD_HOSTNAME_PREFIX="${BOOTSTRAP_ARGOCD_HOSTNAME_PREFIX:-argocd}"
 ARGOCD_PORT_FORWARD_PORT="${BOOTSTRAP_ARGOCD_PORT_FORWARD_PORT:-8080}"
 BOOTSTRAP_AKEYLESS_KEYCHAIN_ACCOUNT="${BOOTSTRAP_AKEYLESS_KEYCHAIN_ACCOUNT:-${USER:-}}"
@@ -154,6 +155,18 @@ wait_for_namespace_deletion() {
         5 \
         "namespace=${namespace}" \
         namespace_is_deleted "${namespace}"
+}
+
+wait_for_profile_app_namespaces_deletion() {
+    local namespace
+
+    if [ -z "${PROFILE_APP_NAMESPACES}" ]; then
+        return 0
+    fi
+
+    for namespace in ${PROFILE_APP_NAMESPACES}; do
+        wait_for_namespace_deletion "${namespace}" 180
+    done
 }
 
 wait_for_webhook_ca_bundle() {
@@ -385,6 +398,7 @@ configure_profile() {
     HELM_REGISTRY_URL="${BOOTSTRAP_HELM_REGISTRY_URL:-registry.gitlab.com/ifpossible-sre/charts}"
     ARGOCD_HOSTNAME_PREFIX="${BOOTSTRAP_ARGOCD_HOSTNAME_PREFIX:-argocd}"
     ARGOCD_PORT_FORWARD_PORT="${BOOTSTRAP_ARGOCD_PORT_FORWARD_PORT:-8080}"
+    PROFILE_APP_NAMESPACES="${BOOTSTRAP_PROFILE_APP_NAMESPACES:-}"
 
     case "${profile_name}" in
         microk8s-prod)
@@ -421,6 +435,7 @@ configure_profile() {
             DOMAIN_SECRET_REMOTE_KEY=""
             METALLB_ADDRESS_POOL=""
             APP_OF_APPS_MANIFEST_PATH="${BOOTSTRAP_APP_OF_APPS_MANIFEST_PATH:-cluster/local-test-plus/app-of-apps.yaml}"
+            PROFILE_APP_NAMESPACES="${BOOTSTRAP_PROFILE_APP_NAMESPACES:-alloy cnpg envoy-gateway-system metallb-system monitoring}"
             ;;
         *)
             die "unknown profile '${profile_name}'. Expected one of: microk8s-prod, microk8s-lab, local-test, local-test-plus."
@@ -1312,6 +1327,8 @@ remove_argocd_app() {
 
     echo "Deleting tracked app-of-apps manifest ${APP_OF_APPS_MANIFEST_FILE}..."
     run_kubectl_with_retry delete -f "${APP_OF_APPS_MANIFEST_FILE}" --ignore-not-found=true
+
+    wait_for_profile_app_namespaces_deletion
 
     echo "ArgoCD app removed from argocd"
 

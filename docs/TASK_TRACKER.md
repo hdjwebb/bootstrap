@@ -116,3 +116,9 @@
 - [x] Reproduce a live `full-uninstall` hang caused by operator-managed resources remaining in a terminating namespace.
 - [x] Add a regression that proves terminating-namespace waits enumerate remaining namespaced resources and clear their finalizers.
 - [x] Scrub lingering workload finalizers during namespace-deletion waits so disposable operator namespaces like `alloy` do not block teardown forever.
+
+## 2026-03-29 Profile Namespace Cleanup
+
+- [x] Reproduce the reinstall failure where `local-test-plus` raced back into an `alloy` namespace that was still terminating.
+- [x] Add a regression that proves `remove-argocd-app` waits for profile-owned workload namespaces and clears lingering finalizers while they terminate.
+- [x] Teach `local-test-plus` root app removal to wait for disposable workload namespaces like `alloy`, `cnpg`, `envoy-gateway-system`, `metallb-system`, and `monitoring` before the reinstall continues.

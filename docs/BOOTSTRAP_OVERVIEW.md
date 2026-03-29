@@ -84,6 +84,13 @@ their own finalizers. Namespace-deletion waits now enumerate the remaining
 namespaced objects and clear `metadata.finalizers`, which is the path that
 unblocks disposable operator namespaces like `alloy` during `full-uninstall`.
 
+The reinstall proof then exposed a second namespace-level race: deleting the
+tracked root app does not mean all of its workload namespaces have actually
+finished terminating. The bootstrap now lets profiles declare workload
+namespaces that must disappear after `remove-argocd-app`, and `local-test-plus`
+uses that to wait for `alloy`, `cnpg`, `envoy-gateway-system`,
+`metallb-system`, and `monitoring` before the reinstall proceeds.
+
 ## Current Hardening Work
 
 The script currently depends on ad-hoc sleeps, inline temp directories, and

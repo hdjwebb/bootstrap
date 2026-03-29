@@ -178,6 +178,9 @@ relative to the bootstrap repo, and you can override it with
 - namespace deletion waits now scrub lingering workload finalizers inside
   terminating namespaces, which keeps disposable operator namespaces like
   `alloy` from hanging `full-uninstall`
+- removing the tracked root app now also waits for profile-owned workload
+  namespaces to disappear before reinstall continues, which prevents
+  `local-test-plus` from racing back into a terminating `alloy` namespace
 - `full-uninstall` now safely skips root app deletion when the Argo CD
   `Application` CRD is not installed, which matters for partial or failed local
   reinstalls
