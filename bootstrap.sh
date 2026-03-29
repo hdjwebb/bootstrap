@@ -403,17 +403,12 @@ argocd_applications_deleted() {
 
 argocd_child_applications_deleted() {
     local remaining_apps=""
-    local app=""
 
     remaining_apps="$(list_argocd_child_applications)"
 
     if [ -z "${remaining_apps}" ]; then
         return 0
     fi
-
-    for app in ${remaining_apps}; do
-        kubectl patch "${app}" -n argocd --type=merge -p '{"metadata":{"finalizers":[]}}' >/dev/null 2>&1 || true
-    done
 
     return 1
 }

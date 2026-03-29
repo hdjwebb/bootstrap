@@ -9,6 +9,7 @@ DEPLOYMENT_STATE_FILE="${WORKDIR}/deployment-state"
 ALLOY_STATE_FILE="${WORKDIR}/alloy-state"
 NAMESPACE_STATE_FILE="${WORKDIR}/namespace-state"
 CHILD_APP_STATE_FILE="${WORKDIR}/child-app-state"
+CHILD_APP_POLL_COUNT_FILE="${WORKDIR}/child-app-poll-count"
 
 cleanup() {
   rm -rf "${WORKDIR}"
@@ -37,6 +38,15 @@ fi
 
 if [ "$#" -ge 6 ] && [ "$1" = "get" ] && [ "$2" = "applications.argoproj.io" ] && [ "$3" = "-n" ] && [ "$4" = "argocd" ] && [ "$5" = "-o" ]; then
   if [ -f "${BOOTSTRAP_TEST_CHILD_APP_STATE_FILE:?}" ]; then
+    poll_count="$(cat "${BOOTSTRAP_TEST_CHILD_APP_POLL_COUNT_FILE:?}")"
+    poll_count=$((poll_count + 1))
+    printf '%s\n' "${poll_count}" > "${BOOTSTRAP_TEST_CHILD_APP_POLL_COUNT_FILE:?}"
+
+    if [ "${poll_count}" -ge 3 ]; then
+      rm -f "${BOOTSTRAP_TEST_CHILD_APP_STATE_FILE:?}"
+      exit 0
+    fi
+
     printf 'alloy|app-of-apps:argoproj.io/Application:argocd/alloy\n'
     printf 'argocd|app-of-apps:argoproj.io/Application:argocd/argocd\n'
   fi
@@ -51,14 +61,9 @@ if [ "$#" -ge 6 ] && [ "$1" = "delete" ] && [ "$2" = "application.argoproj.io/ar
   exit 0
 fi
 
-if [ "$#" -ge 6 ] && [ "$1" = "patch" ] && [ "$2" = "application.argoproj.io/alloy" ] && [ "$3" = "-n" ] && [ "$4" = "argocd" ] && [ "$5" = "--type=merge" ]; then
-  printf 'argocd|app-of-apps:argoproj.io/Application:argocd/argocd\n' > "${BOOTSTRAP_TEST_CHILD_APP_STATE_FILE:?}"
-  exit 0
-fi
-
-if [ "$#" -ge 6 ] && [ "$1" = "patch" ] && [ "$2" = "application.argoproj.io/argocd" ] && [ "$3" = "-n" ] && [ "$4" = "argocd" ] && [ "$5" = "--type=merge" ]; then
-  rm -f "${BOOTSTRAP_TEST_CHILD_APP_STATE_FILE:?}"
-  exit 0
+if [ "$#" -ge 6 ] && [ "$1" = "patch" ] && [ "$3" = "-n" ] && [ "$4" = "argocd" ] && [ "$5" = "--type=merge" ]; then
+  echo "unexpected child application finalizer patch: $*" >&2
+  exit 1
 fi
 
 if [ "$#" -ge 3 ] && [ "$1" = "get" ] && [ "$2" = "namespace" ] && [ "$3" = "alloy" ]; then
@@ -119,12 +124,14 @@ printf 'present\n' > "${DEPLOYMENT_STATE_FILE}"
 printf 'present\n' > "${ALLOY_STATE_FILE}"
 printf 'present\n' > "${NAMESPACE_STATE_FILE}"
 printf 'present\n' > "${CHILD_APP_STATE_FILE}"
+printf '0\n' > "${CHILD_APP_POLL_COUNT_FILE}"
 
 BOOTSTRAP_TEST_LOG_FILE="${LOG_FILE}" \
 BOOTSTRAP_TEST_DEPLOYMENT_STATE_FILE="${DEPLOYMENT_STATE_FILE}" \
 BOOTSTRAP_TEST_ALLOY_STATE_FILE="${ALLOY_STATE_FILE}" \
 BOOTSTRAP_TEST_NAMESPACE_STATE_FILE="${NAMESPACE_STATE_FILE}" \
 BOOTSTRAP_TEST_CHILD_APP_STATE_FILE="${CHILD_APP_STATE_FILE}" \
+BOOTSTRAP_TEST_CHILD_APP_POLL_COUNT_FILE="${CHILD_APP_POLL_COUNT_FILE}" \
 PATH="${WORKDIR}:${PATH}" \
 bash -c '
   set -euo pipefail
@@ -149,8 +156,8 @@ if ! rg -q '^delete application\.argoproj\.io/alloy -n argocd --ignore-not-found
   exit 1
 fi
 
-if ! rg -q '^patch application\.argoproj\.io/alloy -n argocd --type=merge -p \{"metadata":\{"finalizers":\[\]\}\}$' "${LOG_FILE}" || ! rg -q '^patch application\.argoproj\.io/argocd -n argocd --type=merge -p \{"metadata":\{"finalizers":\[\]\}\}$' "${LOG_FILE}"; then
-  echo "FAIL: remove_argocd_app should clear remaining child application finalizers when removal is blocked"
+if rg -q '^patch application\.argoproj\.io/(alloy|argocd) -n argocd --type=merge -p \{"metadata":\{"finalizers":\[\]\}\}$' "${LOG_FILE}"; then
+  echo "FAIL: remove_argocd_app should not clear child application finalizers during the normal prune path"
   exit 1
 fi
 
