@@ -203,6 +203,11 @@ relative to the bootstrap repo, and you can override it with
   it dumps pod/application/ExternalSecret diagnostics
 - the rehearsal script now takes an exclusive lock per minikube profile so two
   destructive runs cannot overlap and invalidate the result
+- direct bootstrap component pins are now audited in
+  [`docs/COMPONENT_VERSION_AUDIT.md`](./docs/COMPONENT_VERSION_AUDIT.md), and
+  the bootstrap repo carries a regression that fails if the pinned upstream
+  Argo CD, cert-manager, Envoy Gateway, or MetalLB versions drift from the
+  intended slice
 - the bootstrap and rehearsal wait loops now emit periodic heartbeats so long
   waits show elapsed time, timeout budget, and the resource they are waiting on
 - the destructive rehearsal script now takes a single-run lock, so a second

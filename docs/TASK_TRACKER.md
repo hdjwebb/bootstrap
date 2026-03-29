@@ -128,3 +128,10 @@
 - [x] Reproduce the uninstall failure where deleting the tracked root app left child Argo CD `Application` objects running and kept disposable namespaces active.
 - [x] Add a regression that proves `remove-argocd-app` deletes the child `Application` objects labeled `app.kubernetes.io/instance=app-of-apps` and clears their finalizers before waiting on workload namespaces.
 - [x] Teach root app removal to tear down child Argo CD applications before namespace waits so `full-uninstall` can progress from a healthy `local-test-plus` install.
+
+## 2026-03-29 Component Upgrade Wave
+
+- [x] Inventory the bootstrap and disposable-cluster component versions against current upstream releases.
+- [x] Add regression coverage for the bootstrap repo's direct upstream version pins.
+- [ ] Upgrade the remaining GitOps-managed components in atomic slices and prove each slice independently.
+- [x] Upgrade bootstrap-managed direct manifest pins for Argo CD, cert-manager, Envoy Gateway, and MetalLB.

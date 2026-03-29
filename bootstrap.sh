@@ -583,7 +583,7 @@ kind: Kustomization
 namespace: argocd
 
 resources:
-- https://raw.githubusercontent.com/argoproj/argo-cd/v2.12.3/manifests/install.yaml
+- https://raw.githubusercontent.com/argoproj/argo-cd/v3.3.6/manifests/install.yaml
 EOF
 
     if argocd_gateway_enabled; then
@@ -794,7 +794,7 @@ install_cert_manager() {
     create_namespace_if_not_exists cert-manager
     
     # Apply the cert-manager manifest
-    run_kubectl_with_retry apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.yaml
+    run_kubectl_with_retry apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.20.1/cert-manager.yaml
     
     echo "Waiting for cert-manager deployments to be ready..."
     wait_for_deployment cert-manager cert-manager
@@ -815,7 +815,7 @@ uninstall_cert_manager() {
     echo "Uninstalling cert-manager..."
     
     # Delete all cert-manager resources
-    run_kubectl_delete_with_retry_or_ignore_missing_apis -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.yaml --ignore-not-found=true
+    run_kubectl_delete_with_retry_or_ignore_missing_apis -f https://github.com/cert-manager/cert-manager/releases/download/v1.20.1/cert-manager.yaml --ignore-not-found=true
 
     kubectl delete namespace cert-manager --ignore-not-found=true --wait=false
     wait_for_namespace_deletion cert-manager 180
@@ -997,7 +997,7 @@ install_envoy() {
 
     echo "Installing Envoy Gateway..."
 # Install Envoy Gateway
-run_kubectl_with_retry apply -f https://github.com/envoyproxy/gateway/releases/download/v1.1.0/install.yaml --server-side
+run_kubectl_with_retry apply -f https://github.com/envoyproxy/gateway/releases/download/v1.7.1/install.yaml --server-side
 
 wait_for_deployment envoy-gateway envoy-gateway-system
 
@@ -1045,7 +1045,7 @@ install_metallb() {
     create_namespace_if_not_exists metallb-system
 
     # Apply MetalLB manifest (which includes CRDs)
-    run_kubectl_with_retry apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.8/config/manifests/metallb-native.yaml
+    run_kubectl_with_retry apply -f https://raw.githubusercontent.com/metallb/metallb/v0.15.3/config/manifests/metallb-native.yaml
 
     echo "Waiting for MetalLB CRDs to be established..."
     kubectl wait --for condition=established --timeout=60s crd/ipaddresspools.metallb.io
