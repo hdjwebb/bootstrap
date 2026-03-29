@@ -35,19 +35,28 @@ if [ "$#" -ge 2 ] && [ "$1" = "delete" ] && [ "$2" = "-f" ]; then
   exit 0
 fi
 
-if [ "$#" -ge 8 ] && [ "$1" = "delete" ] && [ "$2" = "applications.argoproj.io" ] && [ "$3" = "-n" ] && [ "$4" = "argocd" ] && [ "$5" = "-l" ] && [ "$6" = "app.kubernetes.io/instance=app-of-apps" ]; then
-  printf 'remaining\n' > "${BOOTSTRAP_TEST_CHILD_APP_STATE_FILE:?}"
-  exit 0
-fi
-
-if [ "$#" -ge 8 ] && [ "$1" = "get" ] && [ "$2" = "applications.argoproj.io" ] && [ "$3" = "-n" ] && [ "$4" = "argocd" ] && [ "$5" = "-l" ] && [ "$6" = "app.kubernetes.io/instance=app-of-apps" ] && [ "$7" = "-o" ] && [ "$8" = "name" ]; then
+if [ "$#" -ge 6 ] && [ "$1" = "get" ] && [ "$2" = "applications.argoproj.io" ] && [ "$3" = "-n" ] && [ "$4" = "argocd" ] && [ "$5" = "-o" ]; then
   if [ -f "${BOOTSTRAP_TEST_CHILD_APP_STATE_FILE:?}" ]; then
-    printf 'application.argoproj.io/alloy\n'
+    printf 'alloy|app-of-apps:argoproj.io/Application:argocd/alloy\n'
+    printf 'argocd|app-of-apps:argoproj.io/Application:argocd/argocd\n'
   fi
   exit 0
 fi
 
+if [ "$#" -ge 6 ] && [ "$1" = "delete" ] && [ "$2" = "application.argoproj.io/alloy" ] && [ "$3" = "-n" ] && [ "$4" = "argocd" ]; then
+  exit 0
+fi
+
+if [ "$#" -ge 6 ] && [ "$1" = "delete" ] && [ "$2" = "application.argoproj.io/argocd" ] && [ "$3" = "-n" ] && [ "$4" = "argocd" ]; then
+  exit 0
+fi
+
 if [ "$#" -ge 6 ] && [ "$1" = "patch" ] && [ "$2" = "application.argoproj.io/alloy" ] && [ "$3" = "-n" ] && [ "$4" = "argocd" ] && [ "$5" = "--type=merge" ]; then
+  printf 'argocd|app-of-apps:argoproj.io/Application:argocd/argocd\n' > "${BOOTSTRAP_TEST_CHILD_APP_STATE_FILE:?}"
+  exit 0
+fi
+
+if [ "$#" -ge 6 ] && [ "$1" = "patch" ] && [ "$2" = "application.argoproj.io/argocd" ] && [ "$3" = "-n" ] && [ "$4" = "argocd" ] && [ "$5" = "--type=merge" ]; then
   rm -f "${BOOTSTRAP_TEST_CHILD_APP_STATE_FILE:?}"
   exit 0
 fi
@@ -130,12 +139,17 @@ if ! rg -q '^delete -f .*/cluster/local-test-plus/app-of-apps.yaml --ignore-not-
   exit 1
 fi
 
-if ! rg -q '^delete applications\.argoproj\.io -n argocd -l app\.kubernetes\.io/instance=app-of-apps --ignore-not-found=true --wait=false$' "${LOG_FILE}"; then
-  echo "FAIL: remove_argocd_app should delete child Argo CD applications before waiting on workload namespaces"
+if ! rg -q '^get applications\.argoproj\.io -n argocd -o jsonpath=' "${LOG_FILE}"; then
+  echo "FAIL: remove_argocd_app should discover child Argo CD applications from the tracking annotation"
   exit 1
 fi
 
-if ! rg -q '^patch application\.argoproj\.io/alloy -n argocd --type=merge -p \{"metadata":\{"finalizers":\[\]\}\}$' "${LOG_FILE}"; then
+if ! rg -q '^delete application\.argoproj\.io/alloy -n argocd --ignore-not-found=true --wait=false$' "${LOG_FILE}"; then
+  echo "FAIL: remove_argocd_app should delete discovered child Argo CD applications before waiting on workload namespaces"
+  exit 1
+fi
+
+if ! rg -q '^patch application\.argoproj\.io/alloy -n argocd --type=merge -p \{"metadata":\{"finalizers":\[\]\}\}$' "${LOG_FILE}" || ! rg -q '^patch application\.argoproj\.io/argocd -n argocd --type=merge -p \{"metadata":\{"finalizers":\[\]\}\}$' "${LOG_FILE}"; then
   echo "FAIL: remove_argocd_app should clear remaining child application finalizers when removal is blocked"
   exit 1
 fi

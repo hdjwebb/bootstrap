@@ -157,6 +157,10 @@ Notes:
 - [x] Add a regression that proves `remove-argocd-app` deletes the child `Application` objects labeled `app.kubernetes.io/instance=app-of-apps` and clears their finalizers before waiting on workload namespaces.
 - [x] Teach root app removal to tear down child Argo CD applications before namespace waits so `full-uninstall` can progress from a healthy `local-test-plus` install.
 
+Notes:
+- A later live replay showed the disposable child apps were not actually labeled `app.kubernetes.io/instance=app-of-apps`; they are tied back to the root app through `metadata.annotations.argocd.argoproj.io/tracking-id`.
+- The uninstall path now discovers child apps from that tracking annotation instead of the nonexistent label, so teardown really clears the Alloy/monitoring/envoy child apps before waiting on their namespaces.
+
 ## 2026-03-29 Component Upgrade Wave
 
 - [x] Inventory the bootstrap and disposable-cluster component versions against current upstream releases.

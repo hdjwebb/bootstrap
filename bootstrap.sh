@@ -364,13 +364,23 @@ delete_argocd_child_applications() {
         return 0
     fi
 
+    local child_apps=""
+
+    child_apps="$(list_argocd_child_applications)"
+    if [ -z "${child_apps}" ]; then
+        return 0
+    fi
+
     echo "Deleting child Argo CD applications managed by app-of-apps..."
-    kubectl delete applications.argoproj.io -n argocd -l app.kubernetes.io/instance=app-of-apps --ignore-not-found=true --wait=false
+    while read -r app; do
+        [ -z "${app}" ] && continue
+        kubectl delete "${app}" -n argocd --ignore-not-found=true --wait=false
+    done <<< "${child_apps}"
     wait_for_predicate_with_heartbeat \
         "child Argo CD applications to be deleted" \
         "${1:-180}" \
         5 \
-        "namespace=argocd selector=app.kubernetes.io/instance=app-of-apps" \
+        "namespace=argocd annotation=argocd.argoproj.io/tracking-id startsWith app-of-apps:" \
         argocd_child_applications_deleted
 }
 
@@ -395,7 +405,7 @@ argocd_child_applications_deleted() {
     local remaining_apps=""
     local app=""
 
-    remaining_apps="$(kubectl get applications.argoproj.io -n argocd -l app.kubernetes.io/instance=app-of-apps -o name 2>/dev/null || true)"
+    remaining_apps="$(list_argocd_child_applications)"
 
     if [ -z "${remaining_apps}" ]; then
         return 0
@@ -406,6 +416,12 @@ argocd_child_applications_deleted() {
     done
 
     return 1
+}
+
+list_argocd_child_applications() {
+    kubectl get applications.argoproj.io -n argocd \
+        -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.metadata.annotations.argocd\.argoproj\.io/tracking-id}{"\n"}{end}' 2>/dev/null \
+        | awk -F'|' '$2 ~ /^app-of-apps:/ {print "application.argoproj.io/" $1}'
 }
 
 
