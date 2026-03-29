@@ -410,6 +410,8 @@ argocd_child_applications_deleted() {
         return 0
     fi
 
+    clear_terminating_profile_namespace_finalizers
+
     return 1
 }
 
@@ -417,6 +419,26 @@ list_argocd_child_applications() {
     kubectl get applications.argoproj.io -n argocd \
         -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.metadata.annotations.argocd\.argoproj\.io/tracking-id}{"\n"}{end}' 2>/dev/null \
         | awk -F'|' '$2 ~ /^app-of-apps:/ {print "application.argoproj.io/" $1}'
+}
+
+clear_terminating_profile_namespace_finalizers() {
+    local namespace=""
+    local deletion_timestamp=""
+
+    if [ -z "${PROFILE_APP_NAMESPACES}" ]; then
+        return 0
+    fi
+
+    for namespace in ${PROFILE_APP_NAMESPACES}; do
+        if ! kubectl get namespace "${namespace}" >/dev/null 2>&1; then
+            continue
+        fi
+
+        deletion_timestamp="$(kubectl get namespace "${namespace}" -o jsonpath="{.metadata.deletionTimestamp}" 2>/dev/null || true)"
+        if [ -n "${deletion_timestamp}" ]; then
+            clear_namespace_resource_finalizers "${namespace}"
+        fi
+    done
 }
 
 
