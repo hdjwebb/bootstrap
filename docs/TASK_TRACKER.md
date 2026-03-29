@@ -105,6 +105,16 @@ Notes:
 - The remaining failure mode after the Redis mirror fix was not a broken manifest: Grafana, Prometheus, Alloy, and operator images were still pulling on a cold single-node `minikube` when the rehearsal hit its 300-second verification limit.
 - The rehearsal still emits five-second heartbeats, so increasing the timeout budget does not hide stalls; it simply stops a known-slow but healthy cold start from being misclassified as a failure.
 
+## 2026-03-29 Minikube Context Recovery
+
+- [x] Reproduce the destructive rehearsal leaving kubeconfig without an active `minikube` context after cluster recreation.
+- [x] Add a regression that fails unless the rehearsal refreshes and verifies the `minikube` kubeconfig context before bootstrap continues.
+- [x] Teach the rehearsal to run `minikube update-context` and wait until `kubectl config current-context` matches the active minikube profile.
+
+Notes:
+- After `minikube delete` followed by `minikube start`, the `minikube` context could exist without being the active kubeconfig context. The rehearsal previously ignored `kubectl config use-context` failures, which made later diagnostics look like the cluster had vanished.
+- The rehearsal now refreshes kubeconfig explicitly and verifies the active context before it relies on `kubectl`.
+
 ## 2026-03-24 Uninstall/Reinstall Reliability
 
 - [x] Reproduce a live `full-uninstall` -> `full-install` failure on `minikube`.

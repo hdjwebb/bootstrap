@@ -91,6 +91,17 @@ wait_for_cluster_ready() {
     cluster_nodes_are_ready
 }
 
+ensure_minikube_context() {
+  minikube update-context -p "${MINIKUBE_PROFILE}" >/dev/null
+
+  wait_for_predicate_with_heartbeat \
+    "minikube kubeconfig context to be active" \
+    30 \
+    2 \
+    "expected-context=${MINIKUBE_PROFILE}" \
+    minikube_context_is_active
+}
+
 wait_for_namespace_deleted() {
   local namespace="$1"
   local timeout="${2:-180}"
@@ -133,6 +144,10 @@ cluster_nodes_are_ready() {
   ready_nodes="$(kubectl get nodes --no-headers 2>/dev/null | awk '$2 == "Ready" {count++} END {print count+0}')"
 
   [ -n "${total_nodes}" ] && [ "${total_nodes}" -gt 0 ] && [ "${total_nodes}" = "${ready_nodes}" ]
+}
+
+minikube_context_is_active() {
+  [ "$(kubectl config current-context 2>/dev/null || true)" = "${MINIKUBE_PROFILE}" ]
 }
 
 load_akeyless_credentials() {
@@ -275,8 +290,10 @@ main() {
     log_step "Cycle ${cycle}/${CYCLES}: minikube start"
     minikube start -p "${MINIKUBE_PROFILE}"
 
+    log_step "Cycle ${cycle}/${CYCLES}: refresh kubeconfig context"
+    ensure_minikube_context
+
     log_step "Cycle ${cycle}/${CYCLES}: wait for cluster"
-    kubectl config use-context "${MINIKUBE_PROFILE}" >/dev/null 2>&1 || true
     wait_for_cluster_ready
 
     log_step "Cycle ${cycle}/${CYCLES}: bootstrap full-install"
