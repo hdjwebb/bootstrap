@@ -32,6 +32,7 @@ Run the script with one or more explicit actions:
 ./bootstrap.sh --profile local-test-plus full-install
 ./scripts/rehearse-minikube-local-test-plus.sh
 BOOTSTRAP_REHEARSAL_CYCLES=5 ./scripts/rehearse-minikube-local-test-plus.sh
+BOOTSTRAP_REHEARSAL_EXPECTED_APPS_TIMEOUT=1200 ./scripts/rehearse-minikube-local-test-plus.sh
 ```
 
 Available actions:
@@ -203,6 +204,10 @@ relative to the bootstrap repo, and you can override it with
   it dumps pod/application/ExternalSecret diagnostics
 - the rehearsal script now takes an exclusive lock per minikube profile so two
   destructive runs cannot overlap and invalidate the result
+- the rehearsal script now gives the expected-app convergence phase a 900s
+  default budget, and operators can override it with
+  `BOOTSTRAP_REHEARSAL_EXPECTED_APPS_TIMEOUT` when a slower disposable cluster
+  needs more headroom for large cold image pulls
 - direct bootstrap component pins are now audited in
   [`docs/COMPONENT_VERSION_AUDIT.md`](./docs/COMPONENT_VERSION_AUDIT.md), and
   the bootstrap repo carries a regression that fails if the pinned upstream

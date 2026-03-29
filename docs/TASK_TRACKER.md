@@ -95,6 +95,16 @@ Notes:
 - [x] Teach the bootstrap and rehearsal wait loops to emit periodic heartbeats with elapsed time, timeout budget, and the resource being waited on.
 - [x] Prevent overlapping `local-test-plus` rehearsal runs from sharing the same destructive `minikube` cluster.
 
+## 2026-03-29 Rehearsal Timeout Budget
+
+- [x] Reproduce the disposable rehearsal timing out while the expanded `local-test-plus` stack was still converging from cold image pulls.
+- [x] Add regression coverage for the default expected-app heartbeat budget and for `BOOTSTRAP_REHEARSAL_EXPECTED_APPS_TIMEOUT`.
+- [x] Raise the default expected-app wait budget in `scripts/rehearse-minikube-local-test-plus.sh` to 900 seconds and document the override knob.
+
+Notes:
+- The remaining failure mode after the Redis mirror fix was not a broken manifest: Grafana, Prometheus, Alloy, and operator images were still pulling on a cold single-node `minikube` when the rehearsal hit its 300-second verification limit.
+- The rehearsal still emits five-second heartbeats, so increasing the timeout budget does not hide stalls; it simply stops a known-slow but healthy cold start from being misclassified as a failure.
+
 ## 2026-03-24 Uninstall/Reinstall Reliability
 
 - [x] Reproduce a live `full-uninstall` -> `full-install` failure on `minikube`.

@@ -52,6 +52,12 @@ holding the same profile lock. That keeps overlapping destructive runs from
 fighting each other while still making it obvious which resource is slowing the
 cycle down.
 
+The expected-app verification phase now defaults to a 900-second budget because
+`local-test-plus` can spend several minutes pulling large Grafana, Prometheus,
+and operator images on a cold `minikube` node. Operators can override that
+budget with `BOOTSTRAP_REHEARSAL_EXPECTED_APPS_TIMEOUT` when they need a
+different threshold for their disposable cluster hardware.
+
 Recent reinstall investigation also exposed that webhook-serving deployments can
 be `Available` before their admission CA bundles are injected. The bootstrap now
 waits for the cert-manager and external-secrets validating webhook CA bundles

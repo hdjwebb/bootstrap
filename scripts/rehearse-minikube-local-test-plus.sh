@@ -8,6 +8,7 @@ BOOTSTRAP_SCRIPT="${BOOTSTRAP_REHEARSAL_BOOTSTRAP_SCRIPT:-${REPO_ROOT}/bootstrap
 CYCLES="${BOOTSTRAP_REHEARSAL_CYCLES:-1}"
 MINIKUBE_PROFILE="${BOOTSTRAP_MINIKUBE_PROFILE:-minikube}"
 REHEARSAL_LOCK_DIR="${BOOTSTRAP_REHEARSAL_LOCK_DIR:-${TMPDIR:-/tmp}/bootstrap-rehearsal-${MINIKUBE_PROFILE}.lock}"
+EXPECTED_APPS_TIMEOUT="${BOOTSTRAP_REHEARSAL_EXPECTED_APPS_TIMEOUT:-900}"
 
 log_step() {
   echo "==> $*"
@@ -175,7 +176,7 @@ dump_failure_state() {
 }
 
 wait_for_expected_apps() {
-  local timeout=300
+  local timeout="${EXPECTED_APPS_TIMEOUT}"
   local elapsed=0
   local apps_output=""
   local missing_apps=""
