@@ -17,7 +17,7 @@ have pinned locally, the current latest upstream release, and the upgrade plan.
 
 | Component | Current | Latest Upstream | Notes |
 | --- | --- | --- | --- |
-| external-secrets chart/app | `v0.10.4` in bootstrap direct install, `v0.17.0` in kube-components values | `v2.2.0` | major migration, requires overlay and bootstrap patch review |
+| external-secrets chart/app | `v2.2.0` in bootstrap direct install, `v0.17.0` in kube-components values | `v2.2.0` | bootstrap direct install upgraded; kube-components migration tracked separately |
 | CloudNativePG chart/app | `0.24.0` / `1.24.x` | `0.27.1` / `1.28.1` | bounded chart upgrade slice |
 | Grafana k8s-monitoring chart | `3.5.7` | `4.0.0` | major schema change, needs rendered-manifest refresh and overlay review |
 | kube-prometheus-stack chart | `82.14.1` | `82.15.1` | low-risk chart bump inside monitoring slice |

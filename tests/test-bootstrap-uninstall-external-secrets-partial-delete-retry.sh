@@ -23,7 +23,7 @@ ATTEMPT_FILE="${BOOTSTRAP_TEST_ATTEMPT_FILE:?}"
 
 printf '%s\n' "$*" >> "${LOG_FILE}"
 
-if [ "$#" -ge 4 ] && [ "$1" = "delete" ] && [ "$2" = "-f" ] && [ "$3" = "https://github.com/external-secrets/external-secrets/releases/download/v0.10.4/external-secrets.yaml" ]; then
+if [ "$#" -ge 4 ] && [ "$1" = "delete" ] && [ "$2" = "-f" ] && [ "$3" = "https://github.com/external-secrets/external-secrets/releases/download/v2.2.0/external-secrets.yaml" ]; then
   attempts=0
   if [ -f "${ATTEMPT_FILE}" ]; then
     attempts="$(cat "${ATTEMPT_FILE}")"
@@ -38,7 +38,7 @@ if [ "$#" -ge 4 ] && [ "$1" = "delete" ] && [ "$2" = "-f" ] && [ "$3" = "https:/
 
   cat >&2 <<'ERR'
 E0324 22:10:31.272290   91480 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: the server could not find the requested resource"
-unable to recognize "https://github.com/external-secrets/external-secrets/releases/download/v0.10.4/external-secrets.yaml": the server could not find the requested resource
+unable to recognize "https://github.com/external-secrets/external-secrets/releases/download/v2.2.0/external-secrets.yaml": the server could not find the requested resource
 Error from server (NotFound): the server could not find the requested resource
 ERR
   exit 1
@@ -67,7 +67,7 @@ else
   exit 1
 fi
 
-delete_attempts="$(rg -c '^delete -f https://github.com/external-secrets/external-secrets/releases/download/v0.10.4/external-secrets.yaml --ignore-not-found=true$' "${LOG_FILE}")"
+delete_attempts="$(rg -c '^delete -f https://github.com/external-secrets/external-secrets/releases/download/v2.2.0/external-secrets.yaml --ignore-not-found=true$' "${LOG_FILE}")"
 if [ "${delete_attempts}" -lt 2 ]; then
   echo "FAIL: uninstall_external_secrets should retry the manifest delete after a transient transport failure"
   exit 1

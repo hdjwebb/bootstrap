@@ -832,7 +832,7 @@ install_external_secrets() {
     create_namespace_if_not_exists external-secrets
     
     temp_dir
-    # curl -L -o $TEMP_DIR/external-secrets.yaml https://github.com/external-secrets/external-secrets/releases/download/v0.10.4/external-secrets.yaml
+    # curl -L -o $TEMP_DIR/external-secrets.yaml https://github.com/external-secrets/external-secrets/releases/download/v2.2.0/external-secrets.yaml
     
     # # Mac-compatible sed commands
     # sed -i '' 's/namespace: default/namespace: external-secrets/g' $TEMP_DIR/external-secrets.yaml
@@ -847,7 +847,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: external-secrets
 resources:
- - https://github.com/external-secrets/external-secrets/releases/download/v0.10.4/external-secrets.yaml
+ - https://github.com/external-secrets/external-secrets/releases/download/v2.2.0/external-secrets.yaml
 
 patches:
  - target:
@@ -890,12 +890,9 @@ patches:
       path: /metadata/namespace
       value: external-secrets
 
-images:
- - name: ghcr.io/external-secrets/external-secrets
-   newTag: v0.10.4
 EOF
 
-    run_kubectl_with_retry apply -k "$TEMP_DIR"
+    run_kubectl_with_retry apply --server-side -k "$TEMP_DIR"
     rm -rf "$TEMP_DIR"
     
     echo "Waiting for external-secrets deployments to be ready..."
@@ -910,7 +907,7 @@ EOF
 uninstall_external_secrets() {
     echo "Uninstalling external-secrets..."
 
-    run_kubectl_delete_with_retry_or_ignore_missing_apis -f https://github.com/external-secrets/external-secrets/releases/download/v0.10.4/external-secrets.yaml --ignore-not-found=true
+    run_kubectl_delete_with_retry_or_ignore_missing_apis -f https://github.com/external-secrets/external-secrets/releases/download/v2.2.0/external-secrets.yaml --ignore-not-found=true
     kubectl delete namespace external-secrets --ignore-not-found=true --wait=false
     wait_for_namespace_deletion external-secrets 180
 
@@ -946,7 +943,7 @@ EOF
 
     cat <<EOF > "$TEMP_DIR/akeylessClusterStore.yaml"
 # Cluster-wide SecretStore
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ClusterSecretStore
 metadata:
   name: akeyless-cluster-secret-store
@@ -1104,7 +1101,7 @@ install_argocd_secret() {
 
     # Create kustomization.yaml for ArgoCD
     cat <<EOF > "$TEMP_DIR/domainsecret.yaml"
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: domain
@@ -1186,7 +1183,7 @@ resources:
 EOF
     # Create external secret file for gitlab
       cat <<EOF > "$TEMP_DIR/gitlab-repos.yaml"
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: components-repo-secret
@@ -1225,7 +1222,7 @@ spec:
         key: ${GITLAB_COMPONENTS_REPO_AUTH_KEY}
         property: token
 ---
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: cluster-repo-secret
@@ -1264,7 +1261,7 @@ spec:
         key: ${GITLAB_CLUSTER_REPO_AUTH_KEY}
         property: token
 ---
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: registry-secret
@@ -1297,7 +1294,7 @@ spec:
         key: ${GITLAB_REGISTRY_AUTH_KEY}
         property: password
 ---
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: public-pages-helm-repo

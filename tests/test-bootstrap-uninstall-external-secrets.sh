@@ -36,7 +36,7 @@ BOOTSTRAP_TEST_LOG_FILE="${LOG_FILE}" PATH="${WORKDIR}:${PATH}" bash -c '
   uninstall_external_secrets
 ' -- "${SCRIPT}"
 
-if ! rg -q '^delete -f https://github.com/external-secrets/external-secrets/releases/download/v0.10.4/external-secrets.yaml --ignore-not-found=true$' "${LOG_FILE}"; then
+if ! rg -q '^delete -f https://github.com/external-secrets/external-secrets/releases/download/v2.2.0/external-secrets.yaml --ignore-not-found=true$' "${LOG_FILE}"; then
   echo "FAIL: uninstall_external_secrets should delete the tracked external-secrets release manifest"
   exit 1
 fi

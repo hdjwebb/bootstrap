@@ -135,3 +135,4 @@
 - [x] Add regression coverage for the bootstrap repo's direct upstream version pins.
 - [ ] Upgrade the remaining GitOps-managed components in atomic slices and prove each slice independently.
 - [x] Upgrade bootstrap-managed direct manifest pins for Argo CD, cert-manager, Envoy Gateway, and MetalLB.
+- [x] Upgrade the bootstrap External Secrets installer to `v2.2.0` and migrate generated manifests from `external-secrets.io/v1beta1` to `v1`.

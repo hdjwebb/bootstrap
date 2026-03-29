@@ -26,4 +26,7 @@ assert_contains "https://github.com/envoyproxy/gateway/releases/download/v1.7.1/
 assert_contains "https://raw.githubusercontent.com/metallb/metallb/v0.15.3/config/manifests/metallb-native.yaml" \
   "bootstrap.sh should pin MetalLB to v0.15.3"
 
+assert_contains "https://github.com/external-secrets/external-secrets/releases/download/v2.2.0/external-secrets.yaml" \
+  "bootstrap.sh should pin external-secrets to v2.2.0"
+
 echo "PASS: bootstrap upstream version pin checks passed"
