@@ -122,3 +122,9 @@
 - [x] Reproduce the reinstall failure where `local-test-plus` raced back into an `alloy` namespace that was still terminating.
 - [x] Add a regression that proves `remove-argocd-app` waits for profile-owned workload namespaces and clears lingering finalizers while they terminate.
 - [x] Teach `local-test-plus` root app removal to wait for disposable workload namespaces like `alloy`, `cnpg`, `envoy-gateway-system`, `metallb-system`, and `monitoring` before the reinstall continues.
+
+## 2026-03-29 Child App Teardown
+
+- [x] Reproduce the uninstall failure where deleting the tracked root app left child Argo CD `Application` objects running and kept disposable namespaces active.
+- [x] Add a regression that proves `remove-argocd-app` deletes the child `Application` objects labeled `app.kubernetes.io/instance=app-of-apps` and clears their finalizers before waiting on workload namespaces.
+- [x] Teach root app removal to tear down child Argo CD applications before namespace waits so `full-uninstall` can progress from a healthy `local-test-plus` install.

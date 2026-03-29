@@ -91,6 +91,13 @@ namespaces that must disappear after `remove-argocd-app`, and `local-test-plus`
 uses that to wait for `alloy`, `cnpg`, `envoy-gateway-system`,
 `metallb-system`, and `monitoring` before the reinstall proceeds.
 
+The next teardown proof tightened that path again: deleting the tracked root
+app alone was not enough, because the child Argo CD `Application` objects it
+created could still be present and continue managing those disposable
+workloads. `remove-argocd-app` now deletes child applications labeled
+`app.kubernetes.io/instance=app-of-apps`, clears their finalizers if they
+linger, and only then waits for the profile-owned namespaces to disappear.
+
 ## Current Hardening Work
 
 The script currently depends on ad-hoc sleeps, inline temp directories, and

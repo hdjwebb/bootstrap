@@ -359,11 +359,43 @@ delete_argocd_applications() {
         argocd_applications_deleted
 }
 
+delete_argocd_child_applications() {
+    if ! kubectl get namespace argocd >/dev/null 2>&1; then
+        return 0
+    fi
+
+    echo "Deleting child Argo CD applications managed by app-of-apps..."
+    kubectl delete applications.argoproj.io -n argocd -l app.kubernetes.io/instance=app-of-apps --ignore-not-found=true --wait=false
+    wait_for_predicate_with_heartbeat \
+        "child Argo CD applications to be deleted" \
+        "${1:-180}" \
+        5 \
+        "namespace=argocd selector=app.kubernetes.io/instance=app-of-apps" \
+        argocd_child_applications_deleted
+}
+
 argocd_applications_deleted() {
     local remaining_apps=""
     local app=""
 
     remaining_apps="$(kubectl get applications.argoproj.io -n argocd -o name 2>/dev/null || true)"
+
+    if [ -z "${remaining_apps}" ]; then
+        return 0
+    fi
+
+    for app in ${remaining_apps}; do
+        kubectl patch "${app}" -n argocd --type=merge -p '{"metadata":{"finalizers":[]}}' >/dev/null 2>&1 || true
+    done
+
+    return 1
+}
+
+argocd_child_applications_deleted() {
+    local remaining_apps=""
+    local app=""
+
+    remaining_apps="$(kubectl get applications.argoproj.io -n argocd -l app.kubernetes.io/instance=app-of-apps -o name 2>/dev/null || true)"
 
     if [ -z "${remaining_apps}" ]; then
         return 0
@@ -1328,6 +1360,7 @@ remove_argocd_app() {
     echo "Deleting tracked app-of-apps manifest ${APP_OF_APPS_MANIFEST_FILE}..."
     run_kubectl_with_retry delete -f "${APP_OF_APPS_MANIFEST_FILE}" --ignore-not-found=true
 
+    delete_argocd_child_applications 180
     wait_for_profile_app_namespaces_deletion
 
     echo "ArgoCD app removed from argocd"

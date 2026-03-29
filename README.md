@@ -181,6 +181,10 @@ relative to the bootstrap repo, and you can override it with
 - removing the tracked root app now also waits for profile-owned workload
   namespaces to disappear before reinstall continues, which prevents
   `local-test-plus` from racing back into a terminating `alloy` namespace
+- removing the tracked root app now also deletes child Argo CD `Application`
+  objects labeled `app.kubernetes.io/instance=app-of-apps` and clears their
+  finalizers before namespace waits begin, which keeps `full-uninstall` from
+  stalling on still-managed disposable workloads
 - `full-uninstall` now safely skips root app deletion when the Argo CD
   `Application` CRD is not installed, which matters for partial or failed local
   reinstalls
