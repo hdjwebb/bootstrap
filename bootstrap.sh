@@ -620,6 +620,21 @@ patches:
   target:
     kind: ConfigMap
     name: argocd-cm
+- patch: |-
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: argocd-redis
+    spec:
+      template:
+        spec:
+          containers:
+          - name: redis
+            image: mirror.gcr.io/library/redis:8.2.3-alpine
+            imagePullPolicy: IfNotPresent
+  target:
+    kind: Deployment
+    name: argocd-redis
 EOF
 
     if argocd_gateway_enabled; then

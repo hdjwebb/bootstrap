@@ -1,5 +1,13 @@
 # Task Tracker
 
+## 2026-03-29 Argo CD Redis Mirror Override
+
+- [x] Add a regression that renders the bootstrap Argo CD kustomization and fails unless the `argocd-redis` Deployment uses the mirrored Redis image with `IfNotPresent` pull policy.
+- [x] Patch the bootstrap Argo CD renderer so `argocd-redis` avoids the anonymous public ECR image that was rate-limiting destructive rehearsal runs.
+
+Notes:
+- Upstream Argo CD `v3.3.6` points `argocd-redis` at `public.ecr.aws/docker/library/redis:8.2.3-alpine` with `imagePullPolicy: Always`. After repeated fresh-cluster rehearsals this started failing with `toomanyrequests: Rate exceeded`, so the bootstrap path now overrides Redis to `mirror.gcr.io/library/redis:8.2.3-alpine` and uses `IfNotPresent`.
+
 ## 2026-03-23 Bootstrap Hardening
 
 - [x] Add runtime hardening checks and regression tests.
