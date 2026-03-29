@@ -8,6 +8,7 @@ BOOTSTRAP_SCRIPT="${BOOTSTRAP_REHEARSAL_BOOTSTRAP_SCRIPT:-${REPO_ROOT}/bootstrap
 CYCLES="${BOOTSTRAP_REHEARSAL_CYCLES:-1}"
 MINIKUBE_PROFILE="${BOOTSTRAP_MINIKUBE_PROFILE:-minikube}"
 REHEARSAL_LOCK_DIR="${BOOTSTRAP_REHEARSAL_LOCK_DIR:-${TMPDIR:-/tmp}/bootstrap-rehearsal-${MINIKUBE_PROFILE}.lock}"
+REHEARSAL_KUBECONFIG="${BOOTSTRAP_REHEARSAL_KUBECONFIG:-${REHEARSAL_LOCK_DIR}/config}"
 EXPECTED_APPS_TIMEOUT="${BOOTSTRAP_REHEARSAL_EXPECTED_APPS_TIMEOUT:-900}"
 
 log_step() {
@@ -102,6 +103,13 @@ ensure_minikube_context() {
     minikube_context_is_active
 }
 
+prepare_rehearsal_kubeconfig() {
+  mkdir -p "${REHEARSAL_LOCK_DIR}"
+  cp "${HOME}/.kube/config" "${REHEARSAL_KUBECONFIG}"
+  kubectl config use-context "${MINIKUBE_PROFILE}" --kubeconfig "${REHEARSAL_KUBECONFIG}" >/dev/null
+  export KUBECONFIG="${REHEARSAL_KUBECONFIG}"
+}
+
 wait_for_namespace_deleted() {
   local namespace="$1"
   local timeout="${2:-180}"
@@ -148,6 +156,10 @@ cluster_nodes_are_ready() {
 
 minikube_context_is_active() {
   [ "$(kubectl config current-context 2>/dev/null || true)" = "${MINIKUBE_PROFILE}" ]
+}
+
+run_bootstrap_profile_actions() {
+  KUBECONFIG="${REHEARSAL_KUBECONFIG}" bash "${BOOTSTRAP_SCRIPT}" --profile local-test-plus "$@"
 }
 
 load_akeyless_credentials() {
@@ -292,12 +304,13 @@ main() {
 
     log_step "Cycle ${cycle}/${CYCLES}: refresh kubeconfig context"
     ensure_minikube_context
+    prepare_rehearsal_kubeconfig
 
     log_step "Cycle ${cycle}/${CYCLES}: wait for cluster"
     wait_for_cluster_ready
 
     log_step "Cycle ${cycle}/${CYCLES}: bootstrap full-install"
-    if ! bash "${BOOTSTRAP_SCRIPT}" --profile local-test-plus full-install; then
+    if ! run_bootstrap_profile_actions full-install; then
       dump_failure_state
       exit 1
     fi
@@ -309,7 +322,7 @@ main() {
     fi
 
     log_step "Cycle ${cycle}/${CYCLES}: bootstrap full-uninstall"
-    if ! bash "${BOOTSTRAP_SCRIPT}" --profile local-test-plus full-uninstall; then
+    if ! run_bootstrap_profile_actions full-uninstall; then
       dump_failure_state
       exit 1
     fi
@@ -321,7 +334,7 @@ main() {
     fi
 
     log_step "Cycle ${cycle}/${CYCLES}: bootstrap full-install reinstall"
-    if ! bash "${BOOTSTRAP_SCRIPT}" --profile local-test-plus full-install; then
+    if ! run_bootstrap_profile_actions full-install; then
       dump_failure_state
       exit 1
     fi

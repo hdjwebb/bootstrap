@@ -21,12 +21,16 @@ assert_contains() {
 
 assert_contains 'minikube delete' "rehearsal script should tear minikube down"
 assert_contains 'minikube start' "rehearsal script should start minikube"
-assert_contains '--profile local-test-plus full-install' "rehearsal script should bootstrap local-test-plus"
-assert_contains '--profile local-test-plus full-uninstall' "rehearsal script should exercise full-uninstall on the live cluster"
+assert_contains '^run_bootstrap_profile_actions\(\)' "rehearsal script should centralize bootstrap calls through a kubeconfig-aware helper"
+assert_contains 'run_bootstrap_profile_actions full-install' "rehearsal script should bootstrap local-test-plus"
+assert_contains 'run_bootstrap_profile_actions full-uninstall' "rehearsal script should exercise full-uninstall on the live cluster"
 assert_contains '^cluster_nodes_are_ready\(\)' "rehearsal script should poll node readiness with a heartbeat"
 assert_contains '^ensure_minikube_context\(\)' "rehearsal script should verify the minikube kubeconfig context before using kubectl"
 assert_contains 'minikube update-context -p "\$\{MINIKUBE_PROFILE\}"' "rehearsal script should refresh the minikube kubeconfig context after each start"
 assert_contains 'kubectl config current-context' "rehearsal script should verify the active kubeconfig context after update-context"
+assert_contains 'REHEARSAL_KUBECONFIG=' "rehearsal script should keep a dedicated kubeconfig for the destructive rehearsal"
+assert_contains 'kubectl config use-context "\$\{MINIKUBE_PROFILE\}" --kubeconfig "\$\{REHEARSAL_KUBECONFIG\}"' "rehearsal script should pin the rehearsal kubeconfig to the minikube context"
+assert_contains 'KUBECONFIG="\$\{REHEARSAL_KUBECONFIG\}" bash "\$\{BOOTSTRAP_SCRIPT\}" --profile local-test-plus "\$@"' "rehearsal script should run bootstrap against the isolated rehearsal kubeconfig"
 assert_contains 'kubectl -n argocd get applications' "rehearsal script should verify Argo applications"
 assert_contains '^acquire_rehearsal_lock\(\)' "rehearsal script should guard against overlapping destructive runs"
 assert_contains '^log_step\(\)' "rehearsal script should print structured cycle steps"
@@ -39,7 +43,7 @@ assert_contains 'kubectl -n argocd describe applications' "rehearsal script shou
 assert_contains 'kubectl get externalsecret -A' "rehearsal script should dump ExternalSecret state on failure"
 assert_contains 'kubectl describe pod' "rehearsal script should dump pod descriptions on failure"
 assert_contains 'kubectl logs' "rehearsal script should dump logs on failure"
-install_count="$(rg -c -- '--profile local-test-plus full-install' "${SCRIPT}")"
+install_count="$(rg -c -- 'run_bootstrap_profile_actions full-install' "${SCRIPT}")"
 if [ "${install_count}" -lt 2 ]; then
   echo "FAIL: rehearsal script should perform an install, uninstall, and reinstall sequence on the same cluster"
   exit 1

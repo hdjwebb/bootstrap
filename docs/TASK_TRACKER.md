@@ -110,10 +110,12 @@ Notes:
 - [x] Reproduce the destructive rehearsal leaving kubeconfig without an active `minikube` context after cluster recreation.
 - [x] Add a regression that fails unless the rehearsal refreshes and verifies the `minikube` kubeconfig context before bootstrap continues.
 - [x] Teach the rehearsal to run `minikube update-context` and wait until `kubectl config current-context` matches the active minikube profile.
+- [x] Isolate the destructive rehearsal onto its own kubeconfig file so long runs do not depend on the operator's global current-context staying intact.
 
 Notes:
 - After `minikube delete` followed by `minikube start`, the `minikube` context could exist without being the active kubeconfig context. The rehearsal previously ignored `kubectl config use-context` failures, which made later diagnostics look like the cluster had vanished.
 - The rehearsal now refreshes kubeconfig explicitly and verifies the active context before it relies on `kubectl`.
+- The stronger fix is to give the rehearsal its own kubeconfig snapshot after each `minikube start`; that keeps bootstrap and validation pinned to the disposable cluster even if the global kubeconfig gets rewritten mid-run.
 
 ## 2026-03-24 Uninstall/Reinstall Reliability
 
