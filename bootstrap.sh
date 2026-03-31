@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 # K8s bootstrap copyright henry webb 2024
 # ####
 # ####

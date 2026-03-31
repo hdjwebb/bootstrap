@@ -117,6 +117,15 @@ Notes:
 - The rehearsal now refreshes kubeconfig explicitly and verifies the active context before it relies on `kubectl`.
 - The stronger fix is to give the rehearsal its own kubeconfig snapshot after each `minikube start`; that keeps bootstrap and validation pinned to the disposable cluster even if the global kubeconfig gets rewritten mid-run.
 
+## 2026-03-31 Direct Script Execution
+
+- [x] Reproduce `./bootstrap.sh` failing with a syntax error despite `bash -n` passing.
+- [x] Add a regression that requires a Bash shebang at the top of `bootstrap.sh`.
+- [x] Restore direct execution by adding the missing `#!/usr/bin/env bash` shebang.
+
+Notes:
+- `bootstrap.sh` uses Bash-only features like process substitution. Without a shebang, `./bootstrap.sh ...` can be executed by a non-Bash shell path and fail near `< <(...)` even though the script parses correctly under Bash.
+
 ## 2026-03-29 Child App Prune Safety
 
 - [x] Reproduce the uninstall path orphaning CNPG resources after deleting the child Argo CD applications.
